@@ -130,7 +130,7 @@ class DownstreamHandler(ProxyHandler):
         if self._filter_pl.intercepts_req_body():
             self._chunked = True
 
-            # If there's a content length, negotiate the tansfer encoding
+            # If there's a content length, negotiate the transfer encoding
             if self._http_msg.get_header('content-length'):
                 self._http_msg.remove_header('content-length')
                 self._http_msg.remove_header('transfer-encoding')
