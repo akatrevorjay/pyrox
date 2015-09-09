@@ -54,7 +54,7 @@ cdef headers_to_bytes(object headers, object bytes):
     cdef int has_transfer_encoding = False
 
     for header in headers:
-        if needs_content_length and header.name == 'content-length':
+        if needs_content_length and header.name.lower() == 'content-length':
             needs_content_length = False
 
         if not has_transfer_encoding and header.name == 'transfer-encoding':
@@ -62,8 +62,8 @@ cdef headers_to_bytes(object headers, object bytes):
 
         header_to_bytes(header.name, header.values, bytes)
 
-    #if needs_content_length and not has_transfer_encoding:
-    #    header_to_bytes('content-length', '0', bytes)
+    if needs_content_length and not has_transfer_encoding:
+        header_to_bytes('content-length', '0', bytes)
 
     bytes.extend(b'\r\n')
 
