@@ -35,21 +35,21 @@ cdef int _strval(char *src):
     return val
 
 
-cdef header_to_bytes(char *name, object values, object bytes):
-    bytes.extend(name)
-    bytes.extend(b': ')
+cdef header_to_bytes(char *name, object values, object data):
+    data.extend(name)
+    data.extend(b': ')
 
     if len(values) > 0:
-        bytes.extend(values[0])
+        data.extend(values[0])
 
     for value in values[1:]:
-        bytes.extend(b', ')
-        bytes.extend(value)
+        data.extend(b', ')
+        data.extend(value)
 
-    bytes.extend(b'\r\n')
+    data.extend(b'\r\n')
 
 
-cdef headers_to_bytes(object headers, object bytes):
+cdef headers_to_bytes(object headers, object data):
     cdef int needs_content_length = True
     cdef int has_transfer_encoding = False
 
@@ -60,32 +60,32 @@ cdef headers_to_bytes(object headers, object bytes):
         if not has_transfer_encoding and header.name == 'transfer-encoding':
             has_transfer_encoding = True
 
-        header_to_bytes(header.name, header.values, bytes)
+        header_to_bytes(header.name, header.values, data)
 
     if needs_content_length and not has_transfer_encoding:
-        header_to_bytes('content-length', '0', bytes)
+        header_to_bytes('content-length', '0', data)
 
-    bytes.extend(b'\r\n')
+    data.extend(b'\r\n')
 
 
 def request_to_bytes(object http_request):
-    bytes = bytearray()
-    bytes.extend(http_request.method)
-    bytes.extend(b' ')
-    bytes.extend(http_request.url)
-    bytes.extend(b' HTTP/')
-    bytes.extend(http_request.version)
-    bytes.extend(b'\r\n')
-    headers_to_bytes(http_request.headers.values(), bytes)
-    return str(bytes)
+    data = bytearray()
+    data.extend(http_request.method)
+    data.extend(b' ')
+    data.extend(http_request.url)
+    data.extend(b' HTTP/')
+    data.extend(http_request.version)
+    data.extend(b'\r\n')
+    headers_to_bytes(http_request.headers.values(), data)
+    return str(data)
 
 
 def response_to_bytes(object http_response):
-    bytes = bytearray()
-    bytes.extend(b'HTTP/')
-    bytes.extend(http_response.version)
-    bytes.extend(b' ')
-    bytes.extend(http_response.status)
-    bytes.extend(b'\r\n')
-    headers_to_bytes(http_response.headers.values(), bytes)
-    return str(bytes)
+    data = bytearray()
+    data.extend(b'HTTP/')
+    data.extend(http_response.version)
+    data.extend(b' ')
+    data.extend(http_response.status)
+    data.extend(b'\r\n')
+    headers_to_bytes(http_response.headers.values(), data)
+    return str(data)
