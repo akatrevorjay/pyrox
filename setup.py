@@ -67,7 +67,7 @@ os.environ['CFLAGS'] = ' '.join(CFLAGS)
 
 
 setup(
-    name='pyrox',
+    name='vkpyrox',
     version=pyrox.about.VERSION,
     description='The high-speed HTTP middleware proxy for Python',
     author='John Hopper',
