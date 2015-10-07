@@ -133,7 +133,6 @@ class DownstreamHandler(ProxyHandler):
         self._preread_body = AccumulationStream()
 
         self._downstream = downstream
-        # self._downstream_address = downstream_address
         self._http_msg.client_address = downstream_address
 
         self._upstream = None
@@ -487,10 +486,8 @@ class ProxyConnection(object):
 
         # Setup all of the wiring for downstream
         self._downstream = downstream
-        # self._downstream_address = downstream_address
         self._downstream_handler = DownstreamHandler(
             self._downstream,
-            # self._downstream_address,
             downstream_address,
             self._ds_filter_pl,
             self._connect_upstream)
