@@ -110,6 +110,7 @@ class HttpRequest(HttpMessage):
         super(HttpRequest, self).__init__()
         self.method = None
         self.url = None
+        self.client_address = None
 
     def to_bytes(self):
         return request_to_bytes(self)

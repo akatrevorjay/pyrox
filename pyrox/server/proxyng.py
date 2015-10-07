@@ -127,12 +127,15 @@ class DownstreamHandler(ProxyHandler):
     proxy.
     """
 
-    def __init__(self, downstream, filter_pl, connect_upstream):
+    def __init__(self, downstream, downstream_address, filter_pl, connect_upstream):
         super(DownstreamHandler, self).__init__(filter_pl, HttpRequest())
         self._accumulator = AccumulationStream()
         self._preread_body = AccumulationStream()
 
         self._downstream = downstream
+        # self._downstream_address = downstream_address
+        self._http_msg.client_address = downstream_address
+
         self._upstream = None
         self._keep_alive = False
         self._connect_upstream = connect_upstream
@@ -472,7 +475,7 @@ class ProxyConnection(object):
     A proxy connection manages the lifecycle of the sockets opened during a
     proxied client request against Pyrox.
     """
-    def __init__(self, us_filter_pl, ds_filter_pl, downstream, router):
+    def __init__(self, us_filter_pl, ds_filter_pl, downstream, downstream_address, router):
         self._ds_filter_pl = ds_filter_pl
         self._us_filter_pl = us_filter_pl
         self._router = router
@@ -484,8 +487,11 @@ class ProxyConnection(object):
 
         # Setup all of the wiring for downstream
         self._downstream = downstream
+        # self._downstream_address = downstream_address
         self._downstream_handler = DownstreamHandler(
             self._downstream,
+            # self._downstream_address,
+            downstream_address,
             self._ds_filter_pl,
             self._connect_upstream)
         self._downstream_parser = RequestParser(self._downstream_handler)
@@ -603,4 +609,5 @@ class TornadoHttpProxy(TCPServer):
             self.us_pipeline_factory(),
             self.ds_pipeline_factory(),
             downstream,
+            address,
             self._router)
