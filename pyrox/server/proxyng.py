@@ -366,7 +366,7 @@ class UpstreamHandler(ProxyHandler):
             self._filter_pl.on_response_body(data, accumulator, self._request)
 
             if accumulator.size() > 0:
-                data = accumulator.bytes
+                data = accumulator.data
 
             # Hold up on the upstream side until we're done sending this chunk
             self._upstream.handle.disable_reading()
