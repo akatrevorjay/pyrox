@@ -48,8 +48,8 @@ cdef headers_to_bytes(object headers, object bytes):
 
         header_to_bytes(header.name, header.values, bytes)
 
-    if needs_content_length and not has_transfer_encoding:
-        header_to_bytes('Content-Length', '0', bytes)
+    #if needs_content_length and not has_transfer_encoding:
+    #    header_to_bytes('Content-Length', '0', bytes)
 
     bytes.extend(b'\r\n')
 
