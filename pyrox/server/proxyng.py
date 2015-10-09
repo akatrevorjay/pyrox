@@ -515,6 +515,7 @@ class ProxyConnection(object):
         upstream_target = self._router.get_next()
 
         if upstream_target is None:
+            _LOG.warning("Upstream target is None? request=%s", request)
             self._downstream.write(
                 _UPSTREAM_UNAVAILABLE.to_bytes(),
                 self._downstream.handle.resume_reading)
