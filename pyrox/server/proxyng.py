@@ -215,7 +215,16 @@ class DownstreamHandler(ProxyHandler):
     def on_upstream_connect(self, upstream):
         self._upstream = upstream
 
-        if self._preread_body.size() > 0:
+        if self._http_msg.method == 'CONNECT':
+            # Connect downstream read to upstream write
+            self._downstream.read(self._upstream.write)
+
+            # Signal to downstream that the tunnel is ready
+            msg = "HTTP/{0.version} 200 Connection established\r\n\r\n".format(self._http_msg)
+            self._downstream.write(msg, self._downstream.handle.resume_reading)
+
+        elif self._preread_body.size() > 0:
+            self._downstream.handle.disable_reading()
             _write_to_stream(self._upstream,
                              self._preread_body.data,
                              self._chunked,
@@ -534,11 +543,18 @@ class ProxyConnection(object):
             self._upstream_parser.destroy()
         self._upstream_parser = ResponseParser(self._upstream_handler)
 
-        # Set the read callback
-        upstream.read(self._on_upstream_read)
+        connect_tunnel = self._request.method == 'CONNECT'
+        if connect_tunnel:
+            # Connect upstream read to downstream write
+            upstream.read(self._downstream.write)
+        else:
+            # Set the read callback
+            upstream.read(self._on_upstream_read)
 
-        # Send the proxied request object
-        upstream.write(self._request.to_bytes())
+            # Send the proxied request object
+            # If CONNECT, we don't send this upstream!
+            # FUCK This is where we sent Content-Length: 0???
+            upstream.write(self._request.to_bytes())
 
         # Drop the ref to the proxied request head
         self._request = None
