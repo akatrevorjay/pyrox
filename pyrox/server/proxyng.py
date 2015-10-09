@@ -525,8 +525,9 @@ class ProxyConnection(object):
         self._hold_downstream = True
 
         # Update the request to proxy upstream and store it
-        request.replace_header('host').values.append(
-            '{}:{}'.format(upstream_target[0], upstream_target[1]))
+        # FUCK We can't do this as we're proxying, not reverse proxying
+        #request.replace_header('host').values.append(
+        #    '{}:{}'.format(upstream_target[0], upstream_target[1]))
         self._request = request
 
         try:
