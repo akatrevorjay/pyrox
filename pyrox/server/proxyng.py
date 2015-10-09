@@ -18,6 +18,8 @@ import traceback
 
 _LOG = get_logger(__name__)
 
+_SERVER = 'pyrox/{}'.format(VERSION)
+
 """
 100 Continue intermediate response
 """
@@ -36,7 +38,7 @@ Default return object on error. This should be configurable.
 _BAD_GATEWAY_RESP = HttpResponse()
 _BAD_GATEWAY_RESP.version = b'1.1'
 _BAD_GATEWAY_RESP.status = '502 Bad Gateway'
-_BAD_GATEWAY_RESP.header('Server').values.append('pyrox/{}'.format(VERSION))
+_BAD_GATEWAY_RESP.header('Server').values.append(_SERVER)
 _BAD_GATEWAY_RESP.header('Content-Length').values.append('0')
 
 """
@@ -46,8 +48,7 @@ be configurable.
 _UPSTREAM_UNAVAILABLE = HttpResponse()
 _UPSTREAM_UNAVAILABLE.version = b'1.1'
 _UPSTREAM_UNAVAILABLE.status = '503 Service Unavailable'
-_UPSTREAM_UNAVAILABLE.header(
-    'Server').values.append('pyrox/{}'.format(VERSION))
+_UPSTREAM_UNAVAILABLE.header('Server').values.append(_SERVER)
 _UPSTREAM_UNAVAILABLE.header('Content-Length').values.append('0')
 
 _MAX_CHUNK_SIZE = 16384
