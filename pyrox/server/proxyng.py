@@ -27,6 +27,12 @@ _100_CONTINUE = b'HTTP/1.1 100 Continue\r\n\r\n'
 
 
 """
+CONNECT OK response to client
+"""
+_CONNECT_OK = b'HTTP/{version} 200 Connection established\r\n\r\n'
+
+
+"""
 String representing a 0 length HTTP chunked encoding chunk.
 """
 _CHUNK_CLOSE = b'0\r\n\r\n'
@@ -221,8 +227,8 @@ class DownstreamHandler(ProxyHandler):
             self._downstream.read(self._upstream.write)
 
             # Signal to downstream that the tunnel is ready
-            msg = "HTTP/{0.version} 200 Connection established\r\n\r\n".format(self._http_msg)
-            self._downstream.write(msg, self._downstream.handle.resume_reading)
+            self._downstream.write(_CONNECT_OK.format(version=self._http_msg.version),
+                                   self._downstream.handle.resume_reading)
 
         elif self._preread_body.size() > 0:
             self._downstream.handle.disable_reading()
@@ -546,8 +552,7 @@ class ProxyConnection(object):
             self._upstream_parser.destroy()
         self._upstream_parser = ResponseParser(self._upstream_handler)
 
-        connect_tunnel = self._request.method == 'CONNECT'
-        if connect_tunnel:
+        if self._request.method == 'CONNECT':
             # Connect upstream read to downstream write
             upstream.read(self._downstream.write)
         else:
