@@ -1,7 +1,5 @@
 import logging
 
-_LOG_LEVEL_NOTSET = 'NOTSET'
-
 
 def get_logger(logger_name):
     return _LOGGING_MANAGER.get_logger(logger_name)
@@ -12,7 +10,6 @@ def get_log_manager():
 
 
 class LoggingManager(object):
-
     def __init__(self):
         self._root_logger = logging.getLogger()
         self._handlers = list()
@@ -42,7 +39,7 @@ class LoggingManager(object):
 
     def get_logger(self, logger_name):
         logger = logging.getLogger(logger_name)
-        logger.setLevel(_LOG_LEVEL_NOTSET)
         return logger
+
 
 globals()['_LOGGING_MANAGER'] = LoggingManager()
