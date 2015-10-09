@@ -192,7 +192,7 @@ class DownstreamHandler(ProxyHandler):
             # Run through the filter PL and see if we need to modify
             # the body
             self._accumulator.reset()
-            self._filter_pl.on_request_body(data, self._accumulator)
+            self._filter_pl.on_request_body(data, self._accumulator, self._http_msg)
 
             # Check to see if the filter modified the body
             if self._accumulator.size() > 0:
@@ -365,7 +365,7 @@ class UpstreamHandler(ProxyHandler):
             accumulator = AccumulationStream()
             data = bytes
 
-            self._filter_pl.on_response_body(data, accumulator, self._request)
+            self._filter_pl.on_response_body(data, accumulator, self._http_msg, self._request)
 
             if accumulator.size() > 0:
                 data = accumulator.data
