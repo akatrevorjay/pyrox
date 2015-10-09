@@ -385,13 +385,16 @@ class UpstreamHandler(ProxyHandler):
         callback = self._upstream.close
         self._upstream.handle.disable_reading()
 
+        if self._intercepted:
+            data = self._http_msg.to_bytes()
+
         if keep_alive:
-            self._http_msg = HttpResponse()
             callback = self._downstream.handle.resume_reading
+            self._http_msg = HttpResponse()
 
         if self._intercepted:
             # Serialize our message to them
-            self._downstream.write(self._http_msg.to_bytes(), callback)
+            self._downstream.write(data, callback)
         elif is_chunked or self._chunked:
             # Finish the last chunk.
             self._downstream.write(_CHUNK_CLOSE, callback)
