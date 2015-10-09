@@ -217,7 +217,7 @@ class DownstreamHandler(ProxyHandler):
 
         if self._preread_body.size() > 0:
             _write_to_stream(self._upstream,
-                             self._preread_body,
+                             self._preread_body.data,
                              self._chunked,
                              self._downstream.handle.resume_reading)
 
