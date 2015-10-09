@@ -264,13 +264,7 @@ class HttpFilterPipeline(object):
 
         for http_filter, method in chain:
             try:
-                argspec = inspect.getargspec(method)
-
-                if len(argspec.args) == 2:
-                    action = method(*args[0:1])
-                else:
-                    action = method(*args)
-
+                action = method(*args)
             except Exception as ex:
                 _LOG.exception(ex)
                 action = reject()
@@ -288,11 +282,7 @@ class HttpFilterPipeline(object):
 
         for http_filter, method in chain:
             try:
-                argspec = inspect.getargspec(method)
-                if len(argspec.args) == 3:
-                    action = method(*args[0:2])
-                else:
-                    action = method(*args)
+                action = method(*args)
             except Exception as ex:
                 _LOG.exception(ex)
                 action = reject()
