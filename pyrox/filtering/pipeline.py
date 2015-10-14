@@ -24,15 +24,13 @@ CONSUME = 1
 REJECT = 2
 ROUTE = 3
 REPLY = 4
-PEEK = 5
 
 _ACTION_NAMES = {
     0: 'NEXT_FILTER',
     1: 'CONSUME',
     2: 'REJECT',
     3: 'ROUTE',
-    4: 'REPLY',
-    5: 'PEEK',
+    4: 'REPLY'
 }
 
 _BREAKING_ACTIONS = (CONSUME, REJECT, ROUTE, REPLY)
@@ -71,9 +69,6 @@ class FilterAction(object):
 
     def is_routing(self):
         return self.kind == ROUTE
-
-    def is_peeking(self):
-        return self.kind == PEEK
 
     def __str__(self):
         return 'Action({}) - Is breaking flow: {}'.format(
@@ -186,9 +181,9 @@ def reject(response=None):
     :param response: the response object to reply to the client with
     """
     if response is None:
-        return FilterAction(REJECT, (_DEFAULT_REJECT_RESP, None))
+        return FilterAction(REPLY, (_DEFAULT_REJECT_RESP, None))
     else:
-        return FilterAction(REJECT, (response, None))
+        return FilterAction(REPLY, (response, None))
 
 
 def route(upstream_target):
@@ -202,10 +197,6 @@ def route(upstream_target):
                             to.
     """
     return FilterAction(ROUTE, upstream_target)
-
-
-def peek(size=None):
-    return FilterAction(PEEK, size)
 
 
 def next():
