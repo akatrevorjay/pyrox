@@ -170,7 +170,7 @@ def reply(response, src=None):
     return FilterAction(REPLY, (response, src))
 
 
-def reject(response=None):
+def reject(response=None, src=None):
     """
     Rejects the request that this event is related to. Rejection may happen
     during on_request and on_response. The associated response parameter
@@ -181,9 +181,12 @@ def reject(response=None):
     :param response: the response object to reply to the client with
     """
     if response is None:
-        return FilterAction(REPLY, (_DEFAULT_REJECT_RESP, None))
-    else:
-        return FilterAction(REPLY, (response, None))
+        response = _DEFAULT_REJECT_RESP
+
+    if src is None:
+        src = bytearray()
+
+    return FilterAction(REJECT, (response, src))
 
 
 def route(upstream_target):
