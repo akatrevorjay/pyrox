@@ -41,6 +41,8 @@ class HttpMessage(object):
         self._headers = dict()
         self.set_default_headers()
 
+        self.peek_size = 0
+
     def set_default_headers(self):
         """
         Allows messages to set default headers that must be added to the

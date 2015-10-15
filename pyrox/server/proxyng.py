@@ -15,6 +15,7 @@ from pyrox.about import VERSION
 from pyrox.http import (HttpRequest, HttpResponse, RequestParser,
                         ResponseParser, ParserDelegate)
 import traceback
+import functools
 
 _LOG = get_logger(__name__)
 
@@ -87,8 +88,10 @@ class AccumulationStream(object):
     def reset(self):
         self.data = bytearray()
 
-    def write(self, data):
+    def write(self, data, callback=None):
         self.data.extend(data)
+        if callback:
+            callback()
 
     def size(self):
         return len(self.data)
@@ -102,6 +105,7 @@ class ProxyHandler(ParserDelegate):
     - Handling of header field names.
     - Tracking rejection of message sessions.
     """
+
     def __init__(self, filter_pl, http_msg):
         self._filter_pl = filter_pl
         self._http_msg = http_msg
@@ -109,6 +113,8 @@ class ProxyHandler(ParserDelegate):
         self._chunked = False
         self._last_header_field = None
         self._intercepted = False
+        self._rerouted = False
+        self._keep_alive = False
 
     def on_http_version(self, major, minor):
         self._http_msg.version = '{}.{}'.format(major, minor)
@@ -143,7 +149,6 @@ class DownstreamHandler(ProxyHandler):
         self._http_msg.client_address = downstream_address
 
         self._upstream = None
-        self._keep_alive = False
         self._connect_upstream = connect_upstream
 
     def on_req_method(self, method):
@@ -167,9 +172,8 @@ class DownstreamHandler(ProxyHandler):
             # If there's a content length, negotiate the transfer encoding
             if self._http_msg.get_header('content-length'):
                 self._http_msg.remove_header('content-length')
-                self._http_msg.remove_header('transfer-encoding')
 
-                te_header = self._http_msg.header(
+                self._http_msg.replace_header(
                     'transfer-encoding').values.append('chunked')
 
         # If we're rejecting then we're not going to connect to upstream
@@ -189,37 +193,49 @@ class DownstreamHandler(ProxyHandler):
 
     def on_body(self, chunk, length, is_chunked):
         # Rejections simply discard the body
-        if not self._intercepted:
-            # Hold up on the client side until we're done with this chunk
-            self._downstream.handle.disable_reading()
+        if self._intercepted or self._rerouted:
+            return
 
-            # Point to the chunk for our data
-            data = chunk
+        # Hold up on the client side until we're done with this chunk
+        self._downstream.handle.disable_reading()
 
-            # Run through the filter PL and see if we need to modify
-            # the body
-            self._accumulator.reset()
-            self._filter_pl.on_request_body(data, self._accumulator, self._http_msg)
+        # Run through the filter PL and see if we need to modify
+        # the body
+        self._accumulator.reset()
+        action = self._filter_pl.on_request_body(chunk, self._accumulator, self._http_msg)
 
-            # Check to see if the filter modified the body
-            if self._accumulator.size() > 0:
-                data = self._accumulator.data
+        # Check to see if the filter modified the body
+        if self._accumulator.size():
+            chunk = self._accumulator.data
 
-            if self._upstream:
-                # When we write to upstream set the callback to resume
-                # reading from downstream.
-                _write_to_stream(self._upstream,
-                                 data,
-                                 is_chunked,
-                                 self._downstream.handle.resume_reading)
+        # Rerouting to a new upstream
+        if action.is_routing():
+            return self.reroute(action.payload)
 
-            else:
-                # If we're not connected upstream, store the fragment
-                # for later. We will resume reading once upstream
-                # connects
-                self._preread_body.write(data)
+        elif self._upstream:
+            # When we write to upstream set the callback to resume
+            # reading from downstream.
+            _write_to_stream(self._upstream,
+                             chunk,
+                             is_chunked,
+                             self._downstream.handle.resume_reading)
+
+        else:
+            # If we're not connected upstream, store the fragment
+            # for later. We will resume reading once upstream
+            # connects
+            self._preread_body.write(chunk)
+
+    def reroute(self, route):
+        _LOG.info("Rerouting to new upstream")
+        # self._upstream.handle.disable_reading()
+        self._rerouted = True
+        return self._connect_upstream(self._http_msg, route)
 
     def on_upstream_connect(self, upstream):
+        if self._upstream:
+            # This is a new upstream
+            _LOG.debug("Replacement upstream: %s", upstream)
         self._upstream = upstream
 
         if self._http_msg.method == 'CONNECT':
@@ -227,8 +243,10 @@ class DownstreamHandler(ProxyHandler):
             self._downstream.read(self._upstream.write)
 
             # Signal to downstream that the tunnel is ready
-            self._downstream.write(_CONNECT_OK.format(version=self._http_msg.version),
-                                   self._downstream.handle.resume_reading)
+            self._downstream.write(
+                _CONNECT_OK.format(version=self._http_msg.version),
+                self._downstream.handle.resume_reading,
+            )
 
         elif self._preread_body.size() > 0:
             self._downstream.handle.disable_reading()
@@ -246,24 +264,32 @@ class DownstreamHandler(ProxyHandler):
     def on_message_complete(self, is_chunked, keep_alive):
         self._keep_alive = bool(keep_alive)
 
+        self._downstream.handle.disable_reading()
+        callback = self.complete
+
         if self._intercepted:
             # Commit the response to the client (aka downstream)
             writer = ResponseWriter(
                 self._response_tuple[0],
                 self._response_tuple[1],
                 self._downstream,
-                self.complete)
+                callback)
 
             writer.commit()
 
         elif is_chunked:
             # Finish the body with the closing chunk for the origin server
-            self._upstream.write(_CHUNK_CLOSE, self.complete)
+            self._upstream.write(_CHUNK_CLOSE, callback)
+
+        else:
+            callback()
 
     def complete(self):
         if self._keep_alive:
             # Clean up the message obj
             self._http_msg = HttpRequest()
+
+            self._downstream.handle.resume_reading()
 
         else:
             # We're done here - close up shop
@@ -271,7 +297,6 @@ class DownstreamHandler(ProxyHandler):
 
 
 class ResponseWriter(object):
-
     def __init__(self, response, source, stream, on_complete):
         self._on_complete = on_complete
         self._response = response
@@ -286,26 +311,28 @@ class ResponseWriter(object):
         if self._source is not None:
             if self._response.get_header('content-length'):
                 self._response.remove_header('content-length')
-                self._response.remove_header('transfer-encoding')
 
             # Set to chunked to make the transfer easier
-            self._response.header('transfer-encoding').values.append('chunked')
+            self._response.replace_header('transfer-encoding').values.append('chunked')
 
         self._stream.write(self._response.to_bytes(), self.write_body)
 
     def write_body(self):
-        if self._source is not None:
-            src_type = type(self._source)
+        if self._source is None:
+            self._on_complete()
+            return
 
-            if src_type is bytearray or src_type is bytes or src_type is str:
-                self.write_body_as_array()
+        src_type = type(self._source)
 
-            elif src_type is file:
-                self.write_body_as_file()
+        if src_type is bytearray or src_type is bytes or src_type is str:
+            self.write_body_as_array()
 
-            else:
-                raise TypeError(
-                    'Unable to use {} as response body'.format(src_type))
+        elif src_type is file:
+            self.write_body_as_file()
+
+        else:
+            raise TypeError(
+                'Unable to use {} as response body'.format(src_type))
 
     def write_body_as_file(self):
         next_chunk = self._source.read(_MAX_CHUNK_SIZE)
@@ -336,25 +363,73 @@ class ResponseWriter(object):
                 self.write_body_as_array)
 
 
+class PeekAccumulationStream(AccumulationStream):
+    peek_size = 0
+    peeking = True
+
+    def __init__(self, backend_stream, size=None):
+        super(PeekAccumulationStream, self).__init__()
+        self.backend_stream = backend_stream
+        if size is not None:
+            self.peek_size = size
+        if self.peek_size == 0:
+            self.peeking = False
+
+    def write(self, chunk, callback=None):
+        if not self.peeking:
+            return self.backend_stream.write(chunk, callback=callback)
+        cb = functools.partial(self.maybe_flush, callback=callback)
+        return super(PeekAccumulationStream, self).write(chunk, cb)
+
+    def full(self):
+        return self.size() > self.peek_size
+
+    def _maybe_callback(self, callback):
+        if callback:
+            return callback()
+
+    def maybe_flush(self, callback=None):
+        if self.peeking and self.full():
+            return self.flush(callback=callback)
+        else:
+            return self._maybe_callback(callback)
+
+    def flush(self, callback=None):
+        if not self.peeking:
+            return self._maybe_callback(callback)
+
+        self.peeking = False
+        self.backend_stream.write(self.data, callback=callback)
+        self.reset()
+
+    def __getattr__(self, item):
+        return getattr(self.backend_stream, item)
+
+
 class UpstreamHandler(ProxyHandler):
     """
     This proxy handler manages data coming from upstream of the proxy. This
     data usually comes from the origin service or it may come from another
     proxy.
     """
+    _peek_downstream = None
 
-    def __init__(self, downstream, upstream, filter_pl, request):
+    def __init__(self, downstream, upstream, filter_pl, request, connect_upstream):
         super(UpstreamHandler, self).__init__(filter_pl, HttpResponse())
         self._downstream = downstream
         self._upstream = upstream
         self._request = request
+        self._connect_upstream = connect_upstream
 
     def on_status(self, status_code):
         self._http_msg.status = str(status_code)
 
     def on_headers_complete(self):
-        action = self._filter_pl.on_response_head(
-                    self._http_msg, self._request)
+        action = self._filter_pl.on_response_head(self._http_msg, self._request)
+
+        # Rerouting to a new upstream
+        if action.is_routing():
+            return self.reroute(action.payload)
 
         # If we are intercepting the response body do some negotiation
         if self._filter_pl.intercepts_resp_body():
@@ -363,57 +438,101 @@ class UpstreamHandler(ProxyHandler):
             if self._http_msg.get_header('content-length'):
                 self._chunked = True
                 self._http_msg.remove_header('content-length')
-                self._http_msg.remove_header('transfer-encoding')
 
-                self._http_msg.header(
+                self._http_msg.replace_header(
                     'transfer-encoding').values.append('chunked')
 
         if action.is_rejecting():
             self._intercepted = True
             self._response_tuple = action.payload
+            return
 
-        else:
-            self._downstream.write(self._http_msg.to_bytes())
+        if self._request.peek_size:
+            # Specified somewhere in request actions
+            self._http_msg.peek_size = self._request.peek_size
 
-    def on_body(self, bytes, length, is_chunked):
+        if self._http_msg.peek_size:
+            _LOG.info("Peeking response size=%s", self._http_msg.peek_size)
+            # Wrap downstream with a set-size buffered stream
+        self._peek_downstream = PeekAccumulationStream(self._downstream, size=self._http_msg.peek_size)
+
+        data = self._http_msg.to_bytes()
+        self._peek_downstream.write(data)
+
+    def reroute(self, route):
+        self._rerouted = True
+        self._connect_upstream(self._request, route)
+
+    def on_body(self, data, length, is_chunked):
         # Rejections simply discard the body
-        if not self._intercepted:
-            accumulator = AccumulationStream()
-            data = bytes
+        if self._intercepted or self._rerouted:
+            return
 
-            self._filter_pl.on_response_body(data, accumulator, self._http_msg, self._request)
+        accumulator = AccumulationStream()
 
-            if accumulator.size() > 0:
-                data = accumulator.data
+        action = self._filter_pl.on_response_body(data, accumulator, self._http_msg, self._request)
 
-            # Hold up on the upstream side until we're done sending this chunk
-            self._upstream.handle.disable_reading()
+        if accumulator.size() > 0:
+            data = accumulator.data
 
-            # When we write to the stream set the callback to resume
-            # reading from upstream.
-            _write_to_stream(
-                self._downstream,
-                data,
-                is_chunked or self._chunked,
-                self._upstream.handle.resume_reading)
+        if self._request.peek_size and self._peek_downstream.peeking:
+            # Rerouting to a new upstream
+            if action.is_routing():
+                _LOG.error("Rerouting")
+                self.reroute(action.payload)
+                return
 
-    def on_message_complete(self, is_chunked, keep_alive):
-        callback = self._upstream.close
+            # Rejecting
+            # Only applicable if we haven't sent any data yet.
+            elif action.is_rejecting():
+                _LOG.error("Rejecting")
+                self._intercepted = True
+                self._response_tuple = action.payload
+                return
+
+        # Hold up on the upstream side until we're done sending this chunk
         self._upstream.handle.disable_reading()
 
-        if self._intercepted:
-            data = self._http_msg.to_bytes()
+        # When we write to the stream set the callback to resume
+        # reading from upstream.
+        _write_to_stream(
+            self._peek_downstream,
+            data,
+            is_chunked or self._chunked,
+            self._upstream.handle.resume_reading)
+
+    def on_message_complete(self, is_chunked, keep_alive):
+        self._upstream.handle.disable_reading()
 
         if keep_alive:
             callback = self._downstream.handle.resume_reading
             self._http_msg = HttpResponse()
+        else:
+            callback = self._upstream.close
+
+        ''' Callbacks are now set '''
+
+        if self._rerouted:
+            callback()
+            return
 
         if self._intercepted:
             # Serialize our message to them
-            self._downstream.write(data, callback)
-        elif is_chunked or self._chunked:
-            # Finish the last chunk.
-            self._downstream.write(_CHUNK_CLOSE, callback)
+            # Commit the response to the client (aka downstream)
+            writer = ResponseWriter(
+                self._response_tuple[0],
+                self._response_tuple[1],
+                self._downstream,
+                callback,
+            )
+            writer.commit()
+            return
+
+        if self._peek_downstream.peeking:
+            callback = functools.partial(self._peek_downstream.flush, callback=callback)
+
+        if is_chunked or self._chunked:
+            self._peek_downstream.write(_CHUNK_CLOSE, callback=callback)
         else:
             callback()
 
@@ -515,10 +634,13 @@ class ProxyConnection(object):
         self._downstream.read(self._on_downstream_read)
 
     def _connect_upstream(self, request, route=None):
+        if hasattr(self, '_request'):
+            _LOG.info("Connecting to new upstream: %s", route)
+
         if route is not None:
             # This does some type checking for routes passed up via filter
             self._router.set_next(route)
-        upstream_target = self._router.get_next()
+        upstream_target = self._router.get_next(request)
 
         if upstream_target is None:
             _LOG.warning("Upstream target is None? request=%s", request)
@@ -527,12 +649,12 @@ class ProxyConnection(object):
                 self._downstream.handle.resume_reading)
             return
 
-        # Hold downstream reads
-        self._hold_downstream = True
+        # Disable downstream reads
+        self._downstream.handle.disable_reading()
 
         # Update the request to proxy upstream and store it
         # FUCK We can't do this as we're proxying, not reverse proxying
-        #request.replace_header('host').values.append(
+        # request.replace_header('host').values.append(
         #    '{}:{}'.format(upstream_target[0], upstream_target[1]))
         self._request = request
 
@@ -546,7 +668,8 @@ class ProxyConnection(object):
             self._downstream,
             upstream,
             self._us_filter_pl,
-            self._request)
+            self._request,
+            self._connect_upstream)
 
         if self._upstream_parser:
             self._upstream_parser.destroy()
@@ -564,16 +687,17 @@ class ProxyConnection(object):
             # FUCK This is where we sent Content-Length: 0???
             upstream.write(self._request.to_bytes())
 
-        # Drop the ref to the proxied request head
-        self._request = None
-
         # Set up our downstream handler
         self._downstream_handler.on_upstream_connect(upstream)
+
+    # def _on_complete(self):
+    #     self._request = None
 
     def _on_downstream_close(self):
         self._upstream_tracker.destroy()
         self._downstream_parser.destroy()
         self._downstream_parser = None
+        self._request = None
 
     def _on_downstream_error(self, error):
         _LOG.error('Downstream error: {}'.format(error))
@@ -588,7 +712,10 @@ class ProxyConnection(object):
             self._downstream.write(_BAD_GATEWAY_RESP.to_bytes())
 
     def _on_upstream_close(self):
+        _LOG.info('Upstream close')
+
         if not self._downstream.closed():
+            _LOG.info('Closing downstream since upstream is closed')
             self._downstream.close()
 
         if self._upstream_parser is not None:

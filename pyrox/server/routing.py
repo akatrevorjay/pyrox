@@ -1,11 +1,11 @@
 import sys
-
+import inspect
+import collections
 
 if sys.version_info.major == 2:
     from urlparse import urlparse
 elif sys.version_info.major == 3:
     from urllib.parse import urlparse
-
 
 PROTOCOL_HTTP = 0
 PROTOCOL_HTTPS = 1
@@ -67,7 +67,6 @@ class NoRoutesAvailableError(Exception):
 
 
 class RoutingHandler(object):
-
     def __init__(self, routes=None):
         self.routes = list()
         self._next_route = None
@@ -86,28 +85,27 @@ class RoutingHandler(object):
         else:
             raise TypeError('A route must be either a valid URL string.')
 
-    def get_next(self):
+    def get_next(self, request):
         next = None
 
         if self._next_route is not None:
             next = self._next_route
             self._next_route = None
         else:
-            next = self._get_next()
+            next = self._get_next(request)
 
         return next
 
-    def _get_next(self):
+    def _get_next(self, request):
         raise NoRoutesAvailableError('No routes available.')
 
 
 class RoundRobinRouter(RoutingHandler):
-
     def __init__(self, routes):
         super(RoundRobinRouter, self).__init__(routes)
         self._last_default = 0
 
-    def _get_next(self):
+    def _get_next(self, request):
         next_route = None
 
         if len(self.routes) > 0:
@@ -116,3 +114,5 @@ class RoundRobinRouter(RoutingHandler):
             next_route = self.routes[idx]
 
         return next_route
+
+
