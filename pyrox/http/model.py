@@ -14,8 +14,12 @@ class HttpHeader(collections.MutableSequence):
                     the header.
     """
 
-    def __init__(self, name, values_ref):
+    def __init__(self, name, values_ref=None):
         self.name = name
+        if values_ref is None:
+            values_ref = []
+        if not isinstance(values_ref, collections.Sequence):
+            raise ValueError('Cannot set key %s; value is not a sequence: %s' % (key, value))
         self.values = values_ref
 
     def __repr__(self):
@@ -48,8 +52,6 @@ class HttpHeader(collections.MutableSequence):
 
 
 class HttpHeaderCollection(collections.MutableMapping):
-    auto_create_on_getitem = True
-
     def __init__(self, *args, **kwargs):
         self._store = dict()
         self.update(dict(*args, **kwargs))
@@ -62,8 +64,6 @@ class HttpHeaderCollection(collections.MutableMapping):
 
     def __getitem__(self, key):
         tkey = self.__key_transform__(key)
-        if tkey not in self._store and self.auto_create_on_getitem:
-            self[key] = None
         return self._store[tkey]
 
     def __setitem__(self, key, value):
@@ -71,15 +71,6 @@ class HttpHeaderCollection(collections.MutableMapping):
 
         # Coerce value to HttpHeader
         if not isinstance(value, HttpHeader):
-            # string to list
-            if isinstance(value, types.StringTypes):
-                value = [value]
-
-            # None to empty list
-            elif value is None:
-                value = []
-
-            # Wrap our listref
             value = HttpHeader(key, value)
 
         self._store[tkey] = value
@@ -94,25 +85,30 @@ class HttpHeaderCollection(collections.MutableMapping):
     def __len__(self):
         return len(self._store)
 
-    def get_or_create(self, name, value=None):
+    def get_or_create(self, key, default=None):
         """
         Returns the header that matches the name via case-insensitive matching.
         If the header does not exist, a new header is created, attached to the
         message and returned. If the header already exists, then it is
         returned.
         """
-        if name not in self:
-            self[name] = value
-        return self[name]
+        if key not in self:
+            self[key] = default
+        return self[key]
+
+    def pop_always(self, key, default=None):
+        if key not in self:
+            self[key] = default
+        return self.pop(key)
 
     def replace(self, name, value=None):
         """
         Returns a new header with a field set to name. If the header exists
         then the header is removed from the request first.
         """
-        if name in self:
-            del self[name]
-        return self.get_or_create(name, value=value)
+        self.remove(name)
+        self[name] = value
+        return self[name]
 
     def remove(self, name):
         """
