@@ -59,6 +59,9 @@ class HttpHeaderCollection(collections.MutableMapping):
     def __repr__(self):
         return '<%s %s>' % (self.__class__.__name__, self._store.values())
 
+    def _header_factory(self, name, values_ref=None):
+        return HttpHeader(name, values_ref)
+
     def __key_transform__(self, key):
         return key.lower()
 
@@ -71,7 +74,7 @@ class HttpHeaderCollection(collections.MutableMapping):
 
         # Coerce value to HttpHeader
         if not isinstance(value, HttpHeader):
-            value = HttpHeader(key, value)
+            value = self._header_factory(key, value)
 
         self._store[tkey] = value
 
@@ -85,7 +88,17 @@ class HttpHeaderCollection(collections.MutableMapping):
     def __len__(self):
         return len(self._store)
 
-    def get_or_create(self, key, default=None):
+    def get_header(self, key, default=None):
+        if key not in self:
+            return self._header_factory(key, default)
+        return self[key]
+
+    def pop_header(self, key, default=None):
+        if key not in self:
+            return self._header_factory(key, default)
+        return self.pop(key)
+
+    def get_or_set(self, key, default=None):
         """
         Returns the header that matches the name via case-insensitive matching.
         If the header does not exist, a new header is created, attached to the
@@ -95,11 +108,6 @@ class HttpHeaderCollection(collections.MutableMapping):
         if key not in self:
             self[key] = default
         return self[key]
-
-    def pop_always(self, key, default=None):
-        if key not in self:
-            self[key] = default
-        return self.pop(key)
 
     def replace(self, name, value=None):
         """
@@ -164,7 +172,7 @@ class HttpMessage(object):
         message and returned. If the header already exists, then it is
         returned.
         """
-        return self.headers.get_or_create(name)
+        return self.headers.get_or_set(name)
 
     def replace_header(self, name):
         """
@@ -173,13 +181,16 @@ class HttpMessage(object):
         """
         return self.headers.replace(name)
 
-    def get_header(self, name):
+    def get_header(self, name, default=None, remove=False):
         """
         Returns the header that matches the name via case-insensitive matching.
         Unlike the header function, if the header does not exist then a None
         result is returned.
         """
-        return self.headers.get(name, default=None)
+        if remove:
+            return self.headers.pop_header(name, default=default)
+        else:
+            return self.headers.get(name, default=default)
 
     def remove_header(self, name):
         """
