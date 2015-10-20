@@ -107,7 +107,7 @@ cdef class ParserData(object):
 
     cdef public object delegate
 
-    def __init__(self, object delegate):
+    def __cinit__(self, object delegate):
         self.delegate = delegate
 
 
@@ -117,7 +117,7 @@ cdef class HttpEventParser(object):
     cdef http_parser_settings _settings
     cdef object app_data
 
-    def __init__(self, object delegate, kind=_REQUEST_PARSER):
+    def __cinit__(self, object delegate, kind=_REQUEST_PARSER):
         # set parser type
         if kind == _REQUEST_PARSER:
             parser_type = HTTP_REQUEST
