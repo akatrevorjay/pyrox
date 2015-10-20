@@ -14,13 +14,12 @@ class HttpHeader(collections.MutableSequence):
                     the header.
     """
 
-    def __init__(self, name, *args, **kwargs):
+    def __init__(self, name, values_ref):
         self.name = name
-        self.values = list()
-        super(HttpHeader, self).__init__(*args, **kwargs)
+        self.values = values_ref
 
     def __repr__(self):
-        return '<%s %s>' % (self.__class__.__name__, self.values)
+        return "<%s '%s' %s>" % (self.__class__.__name__, self.name, self.values)
 
     def __getitem__(self, item):
         return self.values[item]
@@ -56,7 +55,7 @@ class HttpHeaderCollection(collections.MutableMapping):
         self.update(dict(*args, **kwargs))
 
     def __repr__(self):
-        return '<%s %s>' % (self.__class__.__name__, self._store)
+        return '<%s %s>' % (self.__class__.__name__, self._store.values())
 
     def __key_transform__(self, key):
         return key.lower()
@@ -64,7 +63,7 @@ class HttpHeaderCollection(collections.MutableMapping):
     def __getitem__(self, key):
         tkey = self.__key_transform__(key)
         if tkey not in self._store and self.auto_create_on_getitem:
-            self[tkey] = None
+            self[key] = None
         return self._store[tkey]
 
     def __setitem__(self, key, value):
@@ -80,7 +79,8 @@ class HttpHeaderCollection(collections.MutableMapping):
             elif value is None:
                 value = []
 
-            value = HttpHeader(key, *value)
+            # Wrap our listref
+            value = HttpHeader(key, value)
 
         self._store[tkey] = value
 
