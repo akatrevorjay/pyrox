@@ -690,9 +690,6 @@ class ProxyConnection(object):
         # Set up our downstream handler
         self._downstream_handler.on_upstream_connect(upstream)
 
-    # def _on_complete(self):
-    #     self._request = None
-
     def _on_downstream_close(self):
         self._upstream_tracker.destroy()
         self._downstream_parser.destroy()

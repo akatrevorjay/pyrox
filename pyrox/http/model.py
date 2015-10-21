@@ -16,9 +16,10 @@ class HttpHeaderCollection(collections.MutableMapping):
         return '<%s %s>' % (self.__class__.__name__, list(self))
 
     def as_dict(self):
-        # This maps the key names to their non-transformed versions, as well as removes empty values
-        return {self._names[k]: self._store[k] for k in self._store
-                if self._store[k]}
+        """
+        Returns a dict of headers in collection, with keys being the original cased names the headers were added with.
+        """
+        return {self._names[k]: self._store[k] for k in self._store}
 
     def _header_factory(self, name, value):
         if isinstance(value, (int, bool)):
@@ -70,9 +71,17 @@ class HttpHeaderCollection(collections.MutableMapping):
         return len(self._store)
 
     def original_names(self):
+        """
+        Returns a list of the original (case sensitive) names that headers were added with.
+        """
         return self._names.values()
 
     def get(self, key, default=None, remove=False):
+        """
+        Returns the header values at key (case insensitive match).
+        If header does not exist, default is returned.
+        If remove is True, also remove the values (ala pop).
+        """
         if remove:
             return self.pop(key, default)
         key = self.__key_transform__(key)
@@ -83,12 +92,20 @@ class HttpHeaderCollection(collections.MutableMapping):
     __marker = object()
 
     def pop(self, key, default=__marker):
+        """
+        Returns the header values at key (case insensitive match) then removes the header.
+        If header does not exist, KeyError is raised, or if default is specified, default is returned.
+        """
         key = self.__key_transform__(key)
         if default is not self.__marker and key not in self:
             return default
         return super(HttpHeaderCollection, self).pop(key)
 
     def first(self, key, default=None, remove=False):
+        """
+        Returns the first header value in the list under key (case-insensitive matched).
+        If the header does not exist, default is returned.
+        """
         values = self.get(key, default, remove=remove)
         if values and values is not default:
             return values[0]
@@ -185,9 +202,6 @@ class HttpMessage(object):
         result is returned.
         """
         return self.headers.get(name, default=default)
-
-    def pop_header(self, name, default=None):
-        return self.headers.pop(name, default)
 
     def remove_header(self, name):
         """

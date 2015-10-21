@@ -329,7 +329,7 @@ class SocketIOHandler(IOHandler):
         return self._socket.send(send_buffer)
 
     def _handle_events(self, fd, events):
-        #gen_log.debug('Handle event for stream(fd: {})'.format(self.handle.fd))
+        gen_log.debug('Handle event for stream(fd: {})'.format(self.handle.fd))
 
         if self._socket is None:
             gen_log.warning("Got events for closed stream %d", fd)
