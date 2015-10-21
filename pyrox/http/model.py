@@ -5,98 +5,94 @@ import types
 _EMPTY_HEADER_VALUES = ()
 
 
-class HttpHeader(collections.MutableSequence):
-    """
-    Defines the fields for a HTTP header
-
-    Attributes:
-        name        A bytearray or string value representing the field-name of
-                    the header.
-    """
-
-    def __init__(self, name, values_ref=None):
-        self.name = name
-        if values_ref is None:
-            values_ref = []
-        if not isinstance(values_ref, collections.Sequence):
-            raise ValueError('Cannot set key %s; value is not a sequence: %s' % (key, value))
-        self.values = values_ref
-
-    def __repr__(self):
-        return "<%s '%s' %s>" % (self.__class__.__name__, self.name, self.values)
-
-    def __getitem__(self, item):
-        return self.values[item]
-
-    def insert(self, index, value):
-        self.values[index] = value
-
-    __setitem__ = insert
-
-    def __delitem__(self, key):
-        del self.values[key]
-
-    def __len__(self):
-        return len(self.values)
-
-    def clear(self):
-        del self.values[:]
-
-    def get(self, idx, default=None):
-        if len(self) > idx:
-            return self[idx]
-        return default
-
-    def first(self, default=None):
-        return self.get(0, default=default)
-
-
 class HttpHeaderCollection(collections.MutableMapping):
     def __init__(self, *args, **kwargs):
+        super(HttpHeaderCollection, self).__init__()
+        self._names = dict()
         self._store = dict()
         self.update(dict(*args, **kwargs))
 
     def __repr__(self):
-        return '<%s %s>' % (self.__class__.__name__, self._store.values())
+        return '<%s %s>' % (self.__class__.__name__, list(self))
 
-    def _header_factory(self, name, values_ref=None):
-        return HttpHeader(name, values_ref)
+    def as_dict(self):
+        # This maps the key names to their non-transformed versions, as well as removes empty values
+        return {self._names[k]: self._store[k] for k in self._store
+                if self._store[k]}
+
+    def _header_factory(self, name, value):
+        if isinstance(value, (int, bool)):
+            value = [str(value)]
+        elif isinstance(value, types.StringTypes):
+            value = [value]
+        elif value is None:
+            value = []
+        elif isinstance(value, collections.Sequence):
+            value = list(value)
+
+        if not isinstance(value, list):
+            raise ValueError('Cannot set header %s; value must be a sequence: %s' % (name, value))
+        return value
 
     def __key_transform__(self, key):
         return key.lower()
 
-    def __getitem__(self, key):
+    def __getitem__(self, key, auto_create=True):
         tkey = self.__key_transform__(key)
+
+        if tkey not in self._store and auto_create:
+            self[key] = None
+
         return self._store[tkey]
 
     def __setitem__(self, key, value):
         tkey = self.__key_transform__(key)
 
-        # Coerce value to HttpHeader
-        if not isinstance(value, HttpHeader):
+        if not isinstance(value, list):
             value = self._header_factory(key, value)
 
+        self._names[tkey] = key
         self._store[tkey] = value
 
     def __delitem__(self, key):
         key = self.__key_transform__(key)
         del self._store[key]
+        del self._names[key]
 
     def __iter__(self):
         return iter(self._store)
 
+    def __contains__(self, key):
+        tkey = self.__key_transform__(key)
+        return tkey in self._store
+
     def __len__(self):
         return len(self._store)
 
-    def get_header(self, key, default=None):
+    def original_names(self):
+        return self._names.values()
+
+    def get(self, key, default=None, remove=False):
+        if remove:
+            return self.pop(key, default)
+        key = self.__key_transform__(key)
         if key not in self:
-            return self._header_factory(key, default)
+            return default
         return self[key]
 
-    def pop_header(self, key, default=None):
-        if key not in self:
-            return self._header_factory(key, default)
-        return self.pop(key)
+    __marker = object()
+
+    def pop(self, key, default=__marker):
+        key = self.__key_transform__(key)
+        if default is not self.__marker and key not in self:
+            return default
+        return super(HttpHeaderCollection, self).pop(key)
+
+    def first(self, key, default=None, remove=False):
+        values = self.get(key, default, remove=remove)
+        if values and values is not default:
+            return values[0]
+        return default
 
     def get_or_set(self, key, default=None):
         """
@@ -163,6 +159,7 @@ class HttpMessage(object):
         Allows messages to set default headers that must be added to the
         message before its construction is complete.
         """
+        # self.headers.setdefault('Content-Length', [0])
         pass
 
     def header(self, name):
@@ -181,16 +178,16 @@ class HttpMessage(object):
         """
         return self.headers.replace(name)
 
-    def get_header(self, name, default=None, remove=False):
+    def get_header(self, name, default=None):
         """
         Returns the header that matches the name via case-insensitive matching.
         Unlike the header function, if the header does not exist then a None
         result is returned.
         """
-        if remove:
-            return self.headers.pop_header(name, default=default)
-        else:
-            return self.headers.get(name, default=default)
+        return self.headers.get(name, default=default)
+
+    def pop_header(self, name, default=None):
+        return self.headers.pop(name, default)
 
     def remove_header(self, name):
         """
