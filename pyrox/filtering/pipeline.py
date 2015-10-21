@@ -141,7 +141,7 @@ Default return object. This should be configurable.
 _DEFAULT_REJECT_RESP = HttpResponse()
 _DEFAULT_REJECT_RESP.version = b'1.1'
 _DEFAULT_REJECT_RESP.status = '400 Bad Request'
-_DEFAULT_REJECT_RESP.header('Content-Length').values.append('0')
+_DEFAULT_REJECT_RESP.headers['Content-Length'] = 0
 
 """
 Default filter action singletons.

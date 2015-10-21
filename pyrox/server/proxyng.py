@@ -45,8 +45,8 @@ Default return object on error. This should be configurable.
 _BAD_GATEWAY_RESP = HttpResponse()
 _BAD_GATEWAY_RESP.version = b'1.1'
 _BAD_GATEWAY_RESP.status = '502 Bad Gateway'
-_BAD_GATEWAY_RESP.header('Server').values.append(_SERVER)
-_BAD_GATEWAY_RESP.header('Content-Length').values.append('0')
+_BAD_GATEWAY_RESP.headers['Server'].append(_SERVER)
+_BAD_GATEWAY_RESP.headers['Content-Length'] = 0
 
 """
 Default return object on no route or upstream not responding. This should
@@ -55,8 +55,8 @@ be configurable.
 _UPSTREAM_UNAVAILABLE = HttpResponse()
 _UPSTREAM_UNAVAILABLE.version = b'1.1'
 _UPSTREAM_UNAVAILABLE.status = '503 Service Unavailable'
-_UPSTREAM_UNAVAILABLE.header('Server').values.append(_SERVER)
-_UPSTREAM_UNAVAILABLE.header('Content-Length').values.append('0')
+_UPSTREAM_UNAVAILABLE.headers['Server'].append(_SERVER)
+_UPSTREAM_UNAVAILABLE.headers['Content-Length'] = 0
 
 _MAX_CHUNK_SIZE = 16384
 

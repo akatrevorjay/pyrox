@@ -39,17 +39,14 @@ cdef headers_to_bytes(object headers, object bytes):
     cdef int needs_content_length = True
     cdef int has_transfer_encoding = False
 
-    for name, header in headers.items():
-        if needs_content_length and name == 'content-length':
-            needs_content_length = False
+    for name, values in headers.as_dict().iteritems():
+        header_to_bytes(name, values, bytes)
 
-        if not has_transfer_encoding and name == 'transfer-encoding':
-            has_transfer_encoding = True
+    needs_content_length = 'content-length' not in headers
+    has_transfer_encoding = 'transfer-encoding' in headers
 
-        header_to_bytes(header.name, header.values, bytes)
-
-    #if needs_content_length and not has_transfer_encoding:
-    #    header_to_bytes('Content-Length', '0', bytes)
+    if needs_content_length and not has_transfer_encoding:
+       header_to_bytes('Content-Length', '0', bytes)
 
     bytes.extend(b'\r\n')
 

@@ -153,18 +153,13 @@ cdef class HttpEventParser(object):
         self.destroy()
 
     def execute(self, object data):
-        cdef object strval
-
         if isinstance(data, str) or isinstance(data, bytes):
-            strval = data
+            pass
+        elif isinstance(data, list) or isinstance(data, bytearray):
+            data = str(data)
         else:
-            if isinstance(data, list) or isinstance(data, bytearray):
-                strval = str(data)
-            else:
-                raise Exception('Can not coerce type: {} into str.'.format(
-                    type(data)))
-
-        self._execute(strval, len(data))
+            raise Exception('Can not coerce type: {} into str.'.format(type(data)))
+        self._execute(data, len(data))
 
     cdef int _execute(self, char *data, size_t length) except -1:
         cdef int retval

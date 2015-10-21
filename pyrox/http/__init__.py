@@ -1,2 +1,2 @@
 from .parser import RequestParser, ResponseParser, ParserDelegate
-from .model import HttpHeader, HttpMessage, HttpRequest, HttpResponse
+from .model import HttpMessage, HttpRequest, HttpResponse
