@@ -214,6 +214,17 @@ class HttpMessage(object):
     def to_bytes(self):
         raise NotImplementedError
 
+    def switch_to_chunked(self):
+        """
+        Switches headers to signify we're using chunked encoding.
+        """
+        # If there's a content length, negotiate the transfer encoding
+        if 'content-length' in self.headers:
+            self.headers.pop('content-length')
+
+        # Set to chunked to make the transfer easier
+        self.headers['transfer-encoding'] = 'chunked'
+
 
 class HttpRequest(HttpMessage):
     """
