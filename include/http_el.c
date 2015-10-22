@@ -23,6 +23,8 @@
 #define KEEP_ALIVE "keep-alive"
 #define CLOSE "close"
 
+#define PROXY_PROTOCOL_START "PROXY"
+
 #define T(v) v
 
 
@@ -142,11 +144,15 @@ static const uint8_t normal_url_char[32] = {
 #define IS_URL_CHAR(c) (BIT_AT(normal_url_char, (unsigned char)c) || ((c) & 0x80))
 #define IS_HOST_CHAR(c) (IS_ALPHANUM(c) || (c) == '.' || (c) == '-' || (c) == '_')
 
+#define IS_ADDR_CHAR(c) (IS_NUM(c) || (c) == '.')
+#define IS_PROXY_PROTOCOL_PREFIX(c) ((c) == 'p' || (c) == 'r' || (c) == 'o' || (c) == 'x') || (c) == 'y')
 
 // States
 
 typedef enum {
     // Request states
+    s_req_proxy_protocol,
+
     s_req_start,
     s_req_method,
     s_req_path,
@@ -173,6 +179,19 @@ typedef enum {
     s_resp_status,
     s_resp_rphrase
 } http_el_state;
+
+typedef enum {
+    // Proxy protocol states
+    pp_start,
+    pp_inet,
+    pp_src_addr,
+    pp_dst_addr,
+    pp_src_port,
+    pp_dst_port,
+    pp_done,
+    pp_fail,
+} proxy_protocol_state;
+
 
 typedef enum {
     // Header states
@@ -269,6 +288,8 @@ int on_data_cb(http_parser *parser, http_data_cb cb) {
 #if DEBUG_OUTPUT
 char * http_el_state_name(http_el_state state) {
     switch (state) {
+        case s_req_proxy_protocol:
+            return "proxy protocol";
         case s_req_start:
             return "request start";
         case s_req_method:
@@ -346,7 +367,40 @@ char * http_header_state_name(header_state state) {
             return "ERROR - NOT A STATE";
     }
 }
+
+char * proxy_protocol_state_name(proxy_protocol_state state) {
+    switch (state) {
+        case pp_start:
+            return "proxy_protocol start";
+        case pp_inet:
+            return "proxy_protocol inet";
+        case pp_src_addr:
+            return "proxy_protocol src_addr";
+        case pp_dst_addr:
+            return "proxy_protocol dst_addr";
+        case pp_src_port:
+            return "proxy_protocol src_port";
+        case pp_dst_port:
+            return "proxy_protocol dst_port";
+        case pp_done:
+            return "proxy_protocol done";
+        case pp_fail:
+            return "proxy_protocol fail"
+
+        default:
+            return "ERROR - NOT A STATE";
+    }
+}
 #endif
+
+void set_proxy_protocol_state(http_parser *parser, proxy_protocol_state state) {
+#if DEBUG_OUTPUT
+    printf("%s proxy_protocol state changed --> %s\n",
+        parser->type == HTTP_REQUEST ? "Request" : "Response",
+        http_proxy_protocol_state_name(state));
+#endif
+    parser->proxy_protocol_state = state;
+}
 
 void set_http_state(http_parser *parser, http_el_state state) {
 #if DEBUG_OUTPUT
@@ -379,8 +433,13 @@ void reset_http_parser(http_parser *parser) {
 
     reset_buffer(parser);
     set_header_state(parser, h_general);
-    set_http_state(parser,
+    if (parser->type == HTTP_REQUEST && parser->options & OPT_PROXY_PROTOCOL && parser->proxy_protocol_state != pp_done) {
+        set_proxy_protocol_state(parser, pp_start);
+        set_http_state(parser, s_req_proxy_protocol);
+    } else {
+        set_http_state(parser,
         parser->type == HTTP_REQUEST ? s_req_start : s_resp_start);
+    }
 }
 
 int read_body(http_parser *parser, const http_parser_settings *settings, const char *data, size_t offset, size_t length) {
@@ -846,7 +905,6 @@ int read_request_path(http_parser *parser, const http_parser_settings *settings,
     return retval;
 }
 
-
 int read_request_method(http_parser *parser, const http_parser_settings *settings, char next_byte) {
     int retval = 0;
 
@@ -881,6 +939,132 @@ int start_request(http_parser *parser, const http_parser_settings *settings, cha
         default:
             set_http_state(parser, s_req_method);
             retval = read_request_method(parser, settings, next_byte);
+    }
+
+    return retval;
+}
+
+int start_request_proxy_protocol(http_parser *parser, const http_parser_settings *settings, char next_byte) {
+    int retval = 0;
+
+    switch (parser->proxy_protocol_state) {
+        case pp_start:
+            if (IS_PROXY_PROTOCOL_PREFIX(LOWER(next_byte)) {
+                retval = store_byte(next_byte, parser);
+            } else {
+                switch (next_byte) {
+                    case SPACE:
+                        // Check this is "PROXY"
+                        if (strcasecmp(parser->buffer->bytes, PROXY_PROTOCOL_START) == 0) {
+                            reset_buffer(parser);
+                            set_proxy_protocol_state(parser, pp_inet);
+                        } else {
+                            // This is not proxy protocol
+                            set_proxy_protocol_state(parser, pp_fail);
+                            retval = start_request_proxy_protocol(parser, settings, next_byte);
+                        }
+                        break;
+
+                    default:
+                        // This is not proxy protocol
+                        set_proxy_protocol_state(parser, pp_fail);
+                        retval = start_request_proxy_protocol(parser, settings, next_byte);
+                }
+            }
+            break;
+
+        case pp_inet:
+            if (IS_ALPHANUM(next_byte)) {
+                retval = store_byte(next_byte, parser);
+            } else {
+                switch (next_byte) {
+                    case SPACE:
+                        retval = on_data_cb(parser, settings->on_req_proxy_protocol_inet);
+                        reset_buffer(parser);
+
+                        set_proxy_protocol_state(parser, pp_src_addr);
+                        break;
+
+                    default:
+                        retval = ELERR_BAD_PROXY_PROTOCOL_INET;
+                }
+            }
+            break;
+
+        case pp_src_addr:
+        case pp_dst_addr:
+            if (IS_ADDR_CHAR(next_byte)) {
+                retval = store_byte(next_byte, parser);
+            } else {
+                switch (next_byte) {
+                    case SPACE:
+                        switch (parser->proxy_protocol_state) {
+                            case pp_src_addr:
+                                retval = on_data_cb(parser, settings->on_req_proxy_protocol_src_addr);
+                                reset_buffer(parser);
+
+                                set_proxy_protocol_state(parser, pp_dst_addr);
+                                break;
+
+                            case pp_dst_addr:
+                            default:
+                                retval = on_data_cb(parser, settings->on_req_proxy_protocol_dst_addr);
+                                reset_buffer(parser);
+
+                                set_proxy_protocol_state(parser, pp_src_port);
+                                break;
+                        }
+                        break;
+
+                    default:
+                        retval = parser->proxy_protocol_state == pp_src_addr ? ELERR_BAD_PROXY_PROTOCOL_SRC_ADDR : ELERR_BAD_PROXY_PROTOCOL_DST_ADDR;
+                }
+            }
+            break;
+
+        case pp_src_port:
+        case pp_dst_port:
+            if (IS_NUM(next_byte)) {
+                retval = store_byte(next_byte, parser);
+            } else {
+                switch (next_byte) {
+                    case CR:
+                        break;
+
+                    case LF:
+                        switch (parser->proxy_protocol_state) {
+                            case pp_src_port:
+                                retval = on_data_cb(parser, settings->on_req_proxy_protocol_src_port);
+                                reset_buffer(parser);
+
+                                set_proxy_protocol_state(parser, pp_dst_port);
+                                break;
+
+                            case pp_dst_port:
+                            default:
+                                retval = on_data_cb(parser, settings->on_req_proxy_protocol_dst_port);
+                                reset_buffer(parser);
+
+                                set_proxy_protocol_state(parser, pp_done);
+
+                                // Start request next
+                                set_http_state(parser, s_req_start);
+                                break;
+                        }
+                        break;
+
+                    default:
+                        retval = parser->proxy_protocol_state == pp_src_port ? ELERR_BAD_PROXY_PROTOCOL_SRC_PORT : ELERR_BAD_PROXY_PROTOCOL_DST_PORT;
+                }
+            }
+            break;
+
+        case pp_fail:
+            set_proxy_protocol_state(parser, pp_done);
+        case pp_done:
+            set_http_state(parser, s_req_start);
+            retval = start_request(parser, settings, next_byte);
+            break;
     }
 
     return retval;
@@ -956,6 +1140,10 @@ int http_parser_exec(http_parser *parser, const http_parser_settings *settings, 
 #endif
 
         switch (parser->state) {
+            case s_req_proxy_protocol:
+                retval = start_request_proxy_protocol(parser, settings, next_byte);
+                break;
+
             case s_req_start:
                 retval = start_request(parser, settings, next_byte);
                 break;
@@ -1042,7 +1230,7 @@ int http_parser_exec(http_parser *parser, const http_parser_settings *settings, 
 }
 
 
-void http_parser_init(http_parser *parser, enum http_parser_type parser_type) {
+void http_parser_init(http_parser *parser, enum http_parser_type parser_type, enum http_parser_options parser_options) {
     // Preserve app_data ref
     void *app_data = parser->app_data;
 
@@ -1052,6 +1240,7 @@ void http_parser_init(http_parser *parser, enum http_parser_type parser_type) {
     // Set up the struct elements
     parser->app_data = app_data;
     parser->type = parser_type;
+    parser->options = parser_options;
     parser->buffer = init_pbuffer(HTTP_MAX_HEADER_SIZE);
     reset_http_parser(parser);
 }

@@ -29,6 +29,10 @@ enum http_parser_type {
     HTTP_RESPONSE
 };
 
+enum http_parser_options {
+    OPT_PROXY_PROTOCOL  = 1 << 0,
+};
+
 enum flags {
     F_CHUNKED               = 1 << 0,
     F_CONNECTION_KEEP_ALIVE = 1 << 1,
@@ -53,6 +57,13 @@ enum HTTP_EL_ERROR {
 
     ELERR_BAD_METHOD = 100,
 
+    ELERR_BAD_PROXY_PROTOCOL = 200,
+    ELERR_BAD_PROXY_PROTOCOL_INET = 201,
+    ELERR_BAD_PROXY_PROTOCOL_SRC_ADDR = 202,
+    ELERR_BAD_PROXY_PROTOCOL_DST_ADDR = 203,
+    ELERR_BAD_PROXY_PROTOCOL_SRC_PORT = 204,
+    ELERR_BAD_PROXY_PROTOCOL_DST_PORT = 205,
+
     ELERR_PBUFFER_OVERFLOW = 1000
 };
 
@@ -66,6 +77,11 @@ struct pbuffer {
 
 struct http_parser_settings {
     http_cb           on_message_begin;
+    http_data_cb      on_req_proxy_protocol_inet;
+    http_data_cb      on_req_proxy_protocol_src_addr;
+    http_data_cb      on_req_proxy_protocol_dst_addr;
+    http_data_cb      on_req_proxy_protocol_src_port;
+    http_data_cb      on_req_proxy_protocol_dst_port;
     http_data_cb      on_req_method;
     http_data_cb      on_req_path;
     http_cb           on_http_version;
@@ -80,6 +96,7 @@ struct http_parser_settings {
 struct http_parser {
     // Parser fields
     unsigned char flags : 5;
+    unsigned char options : 1;
     unsigned char state;
     unsigned char header_state;
     unsigned char type;
@@ -94,7 +111,9 @@ struct http_parser {
     unsigned short http_minor;
 
     // Request specific
-    // Reponse specific
+    unsigned char proxy_protocol_state;
+
+    // Response specific
     unsigned short status_code;
 
     // Buffer
@@ -106,7 +125,7 @@ struct http_parser {
 
 
 // Functions
-void http_parser_init(http_parser *parser, enum http_parser_type parser_type);
+void http_parser_init(http_parser *parser, enum http_parser_type parser_type, enum http_parser_options parser_options);
 void free_http_parser(http_parser *parser);
 
 int http_parser_exec(http_parser *parser, const http_parser_settings *settings, const char *data, size_t len);

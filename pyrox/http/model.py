@@ -231,7 +231,18 @@ class HttpRequest(HttpMessage):
     """
     method = None
     url = None
-    client_address = None
+    socket_client_address = None
+    _client_address = None
+
+    @property
+    def client_address(self):
+        if self._client_address:
+            return self._client_address
+        return self.socket_client_address
+
+    @client_address.setter
+    def client_address_setter(self, value):
+        self._client_address = value
 
     def to_bytes(self):
         return request_to_bytes(self)

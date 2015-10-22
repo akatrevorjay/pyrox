@@ -3,17 +3,26 @@ cdef extern from "http_el.h":
     cdef enum http_parser_type:
         HTTP_REQUEST, HTTP_RESPONSE
 
+    cdef enum http_parser_options:
+        OPT_PROXY_PROTOCOL
+
     cdef struct http_parser:
         unsigned long content_length
         void *app_data
         short http_major
         short http_minor
         short status_code
+        char options
 
     ctypedef int (*http_data_cb) (http_parser*, char *at, size_t length) except -1
     ctypedef int (*http_cb) (http_parser*) except -1
 
     struct http_parser_settings:
+        http_data_cb      on_req_proxy_protocol_inet
+        http_data_cb      on_req_proxy_protocol_src_addr
+        http_data_cb      on_req_proxy_protocol_dst_addr
+        http_data_cb      on_req_proxy_protocol_src_port
+        http_data_cb      on_req_proxy_protocol_dst_port
         http_data_cb      on_req_method
         http_data_cb      on_req_path
         http_cb           on_http_version
@@ -26,7 +35,7 @@ cdef extern from "http_el.h":
 
 
 cdef extern from "http_el.c":
-    void http_parser_init(http_parser *parser, http_parser_type ptype)
+    void http_parser_init(http_parser *parser, http_parser_type parser_type, http_parser_options parser_options)
     void free_http_parser(http_parser *parser)
 
     int http_parser_exec(http_parser *parser, http_parser_settings *settings, char *data, size_t len) except -1

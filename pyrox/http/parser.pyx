@@ -3,19 +3,49 @@ from libc.stdlib cimport malloc, free
 
 from cpython cimport bool, PyBytes_FromStringAndSize, PyBytes_FromString
 
-from parser cimport http_parser_type, http_parser, http_parser_settings, http_parser_init, free_http_parser, http_parser_exec, http_should_keep_alive, http_transfer_encoding_chunked
+from parser cimport http_parser_type, http_parser, http_parser_settings, http_parser_init, free_http_parser, http_parser_exec, http_should_keep_alive, http_transfer_encoding_chunked, OPT_PROXY_PROTOCOL
 
 import traceback
 
 _REQUEST_PARSER = 0
 _RESPONSE_PARSER = 1
 
-def RequestParser(parser_delegate):
-    return HttpEventParser(parser_delegate, _REQUEST_PARSER)
+def RequestParser(parser_delegate, proxy_protocol=False):
+    return HttpEventParser(parser_delegate, _REQUEST_PARSER, proxy_protocol=proxy_protocol)
 
 def ResponseParser(parser_delegate):
     return HttpEventParser(parser_delegate, _RESPONSE_PARSER)
 
+
+cdef int on_req_proxy_protocol_inet(http_parser *parser, char *data, size_t length) except -1:
+    cdef object app_data = <object> parser.app_data
+    cdef object inet_str = PyBytes_FromStringAndSize(data, length)
+    app_data.delegate.on_req_proxy_protocol_inet(inet_str)
+    return 0
+
+cdef int on_req_proxy_protocol_src_addr(http_parser *parser, char *data, size_t length) except -1:
+    cdef object app_data = <object> parser.app_data
+    cdef object src_addr_str = PyBytes_FromStringAndSize(data, length)
+    app_data.delegate.on_req_proxy_protocol_src_addr(src_addr_str)
+    return 0
+
+cdef int on_req_proxy_protocol_dst_addr(http_parser *parser, char *data, size_t length) except -1:
+    cdef object app_data = <object> parser.app_data
+    cdef object dst_addr_str = PyBytes_FromStringAndSize(data, length)
+    app_data.delegate.on_req_proxy_protocol_dst_addr(dst_addr_str)
+    return 0
+
+cdef int on_req_proxy_protocol_src_port(http_parser *parser, char *data, size_t length) except -1:
+    cdef object app_data = <object> parser.app_data
+    cdef object src_port_str = PyBytes_FromStringAndSize(data, length)
+    app_data.delegate.on_req_proxy_protocol_src_port(src_port_str)
+    return 0
+
+cdef int on_req_proxy_protocol_dst_port(http_parser *parser, char *data, size_t length) except -1:
+    cdef object app_data = <object> parser.app_data
+    cdef object dst_port_str = PyBytes_FromStringAndSize(data, length)
+    app_data.delegate.on_req_proxy_protocol_dst_port(dst_port_str)
+    return 0
 
 cdef int on_req_method(http_parser *parser, char *data, size_t length) except -1:
     cdef object app_data = <object> parser.app_data
@@ -78,6 +108,21 @@ class ParserDelegate(object):
     def on_status(self, status_code):
         pass
 
+    def on_req_proxy_protocol_inet(self, inet):
+        pass
+
+    def on_req_proxy_protocol_src_addr(self, src_addr):
+        pass
+
+    def on_req_proxy_protocol_dst_addr(self, src_addr):
+        pass
+
+    def on_req_proxy_protocol_src_port(self, src_port):
+        pass
+
+    def on_req_proxy_protocol_dst_port(self, src_port):
+        pass
+
     def on_req_method(self, method):
         pass
 
@@ -117,7 +162,7 @@ cdef class HttpEventParser(object):
     cdef http_parser_settings _settings
     cdef object app_data
 
-    def __cinit__(self, object delegate, kind=_REQUEST_PARSER):
+    def __cinit__(self, object delegate, kind=_REQUEST_PARSER, proxy_protocol=False):
         # set parser type
         if kind == _REQUEST_PARSER:
             parser_type = HTTP_REQUEST
@@ -126,14 +171,24 @@ cdef class HttpEventParser(object):
         else:
             raise Exception('Kind must be 0 for requests or 1 for responses')
 
+        parser_options = 0
+        if proxy_protocol:
+            parser_options |= OPT_PROXY_PROTOCOL
+
         # initialize parser
         self._parser = <http_parser *> malloc(sizeof(http_parser))
-        http_parser_init(self._parser, parser_type)
+        http_parser_init(self._parser, parser_type, parser_options)
 
         self.app_data = ParserData(delegate)
         self._parser.app_data = <void *>self.app_data
 
         # set callbacks
+        self._settings.on_req_proxy_protocol_inet = <http_data_cb>on_req_proxy_protocol_inet
+        self._settings.on_req_proxy_protocol_src_addr = <http_data_cb>on_req_proxy_protocol_src_addr
+        self._settings.on_req_proxy_protocol_dst_addr = <http_data_cb>on_req_proxy_protocol_dst_addr
+        self._settings.on_req_proxy_protocol_src_port = <http_data_cb>on_req_proxy_protocol_src_port
+        self._settings.on_req_proxy_protocol_dst_port = <http_data_cb>on_req_proxy_protocol_dst_port
+
         self._settings.on_req_method = <http_data_cb>on_req_method
         self._settings.on_req_path = <http_data_cb>on_req_path
         self._settings.on_http_version = <http_cb>on_http_version
