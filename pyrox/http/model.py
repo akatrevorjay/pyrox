@@ -1,8 +1,34 @@
-from .model_util import request_to_bytes, response_to_bytes
 import collections
-import types
+import six
+import sys
 
 _EMPTY_HEADER_VALUES = ()
+
+
+class lowerstr(str):
+    """Lowercase optimized str."""
+
+    def __new__(cls, val='', encoding=sys.getdefaultencoding(), errors='strict'):
+        if six.PY3 and isinstance(val, (bytes, bytearray, memoryview)):
+            val = str(val, encoding, errors)
+        elif isinstance(val, str):
+            pass
+        else:
+            val = str(val)
+        val = val.lower()
+        return str.__new__(cls, val)
+
+    def lower(self):
+        return self
+
+
+def _to_bytes(value, encoding='utf8'):
+    if isinstance(value, six.binary_type):
+        return value
+    elif isinstance(value, six.text_type):
+        return value.encode(encoding)
+    else:
+        raise ValueError("Cannot coerce type:%s=%s to bytes", type(value), value)
 
 
 class HttpHeaderCollection(collections.MutableMapping):
@@ -22,21 +48,21 @@ class HttpHeaderCollection(collections.MutableMapping):
         return {self._names[k]: self._store[k] for k in self._store}
 
     def _header_factory(self, name, value):
-        if isinstance(value, (int, bool)):
-            value = [str(value)]
-        elif isinstance(value, types.StringTypes):
+        if isinstance(value, six.string_types):
             value = [value]
         elif value is None:
             value = []
         elif isinstance(value, collections.Sequence):
             value = list(value)
+        else:
+            value = [str(value)]
 
         if not isinstance(value, list):
             raise ValueError('Cannot set header %s; value must be a sequence: %s' % (name, value))
         return value
 
     def __key_transform__(self, key):
-        return key.lower()
+        return lowerstr(key)
 
     def __getitem__(self, key, auto_create=True):
         tkey = self.__key_transform__(key)
@@ -76,7 +102,7 @@ class HttpHeaderCollection(collections.MutableMapping):
         """
         return self._names.values()
 
-    def get(self, key, default=None, remove=False):
+    def get(self, key, default=None, remove=False, auto_create=True):
         """
         Returns the header values at key (case insensitive match).
         If header does not exist, default is returned.
@@ -84,10 +110,11 @@ class HttpHeaderCollection(collections.MutableMapping):
         """
         if remove:
             return self.pop(key, default)
-        key = self.__key_transform__(key)
-        if key not in self:
+        tkey = self.__key_transform__(key)
+        if tkey not in self:
             return default
-        return self[key]
+
+        return self.__getitem__(key, auto_create=auto_create)
 
     __marker = object()
 
@@ -141,6 +168,28 @@ class HttpHeaderCollection(collections.MutableMapping):
             del self[name]
             return True
         return False
+
+    def _header_to_bytes(self, name, values, data):
+        data.extend(_to_bytes(name))
+        data.extend(b': ')
+
+        if values:
+            data.extend(b', '.join([_to_bytes(v) for v in values]))
+
+        data.extend(b'\r\n')
+
+    def to_bytes(self, data):
+        for name in self.original_names():
+            values = self.get(name, default=[], auto_create=False)
+            self._header_to_bytes(name, values, data)
+
+        needs_content_length = 'content-length' not in self
+        has_transfer_encoding = 'transfer-encoding' in self
+
+        if needs_content_length and not has_transfer_encoding:
+            self._header_to_bytes(b'Content-Length', b'0', data)
+
+        data.extend(b'\r\n')
 
 
 class HttpMessage(object):
@@ -211,9 +260,6 @@ class HttpMessage(object):
         """
         return self.headers.remove(name)
 
-    def to_bytes(self):
-        raise NotImplementedError
-
     def switch_to_chunked(self):
         """
         Switches headers to signify we're using chunked encoding.
@@ -224,6 +270,9 @@ class HttpMessage(object):
 
         # Set to chunked to make the transfer easier
         self.headers['transfer-encoding'] = 'chunked'
+
+    def to_bytes(self):
+        raise NotImplementedError
 
 
 class HttpRequest(HttpMessage):
@@ -256,7 +305,15 @@ class HttpRequest(HttpMessage):
         self._client_address = value
 
     def to_bytes(self):
-        return request_to_bytes(self)
+        data = bytearray()
+        data.extend(_to_bytes(self.method))
+        data.extend(b' ')
+        data.extend(_to_bytes(self.url))
+        data.extend(b' HTTP/')
+        data.extend(_to_bytes(self.version))
+        data.extend(b'\r\n')
+        self.headers.to_bytes(data)
+        return bytes(data)
 
 
 class HttpResponse(HttpMessage):
@@ -272,4 +329,11 @@ class HttpResponse(HttpMessage):
     status = None
 
     def to_bytes(self):
-        return response_to_bytes(self)
+        data = bytearray()
+        data.extend(b'HTTP/')
+        data.extend(_to_bytes(self.version))
+        data.extend(b' ')
+        data.extend(_to_bytes(self.status))
+        data.extend(b'\r\n')
+        self.headers.to_bytes(data)
+        return bytes(data)

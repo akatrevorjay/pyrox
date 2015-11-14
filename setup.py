@@ -48,11 +48,6 @@ def compile_pyx():
             include_dirs = ['include/'])
     ext_modules.append(e)
 
-    e = Extension('pyrox.http.model_util',
-            sources=['pyrox/http/model_util.pyx'],
-            include_dirs = ['include/'])
-    ext_modules.append(e)
-
     return ext_modules
 
 

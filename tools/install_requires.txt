@@ -2,3 +2,4 @@ cython
 sphinx
 tornado
 pynsive
+six
