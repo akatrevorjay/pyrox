@@ -49,10 +49,12 @@ class TestUpstreamHandler(unittest.TestCase):
         upstream = mock.MagicMock()
         request = mock.Mock()
 
-        handler = UpstreamHandler(downstream, upstream, pipeline, request)
+        connect_upstream = mock.MagicMock()
+
+        handler = UpstreamHandler(downstream, upstream, pipeline, request, connect_upstream)
         handler.on_status(200) # Make response non-empty to prevent errors
         handler.on_headers_complete()
-        handler.on_body(bytes='', length=0, is_chunked=False)
+        handler.on_body(data='', length=0, is_chunked=False)
 
         self.assertTrue(on_head_got_request)
         self.assertTrue(on_body_got_request)
