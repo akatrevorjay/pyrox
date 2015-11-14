@@ -36,7 +36,7 @@ _ACTION_NAMES = {
 _BREAKING_ACTIONS = (CONSUME, REJECT, ROUTE, REPLY)
 
 
-class FilterAction(object):
+class FilterAction(Exception, object):
     """
     A filter action allows us to tell upstream controls what the filter has
     decided as the next course of action. Certain filter actions may include
