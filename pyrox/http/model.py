@@ -213,7 +213,7 @@ class HttpMessage(object):
     """
     peek_size = 0
 
-    def __init__(self, version='1.1'):
+    def __init__(self, version=b'1.1'):
         self.version = version
         self.local_data = dict()
 
