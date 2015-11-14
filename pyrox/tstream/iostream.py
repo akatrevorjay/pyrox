@@ -7,6 +7,7 @@ import socket
 import logging
 import ssl
 import sys
+import six
 
 from tornado import ioloop
 from tornado.log import gen_log
@@ -272,7 +273,7 @@ class SocketIOHandler(IOHandler):
     def write(self, msg, callback=None):
         self._assert_not_closed()
 
-        if not isinstance(msg, basestring) and not isinstance(msg, bytearray):
+        if not isinstance(msg, six.string_types) and not isinstance(msg, (six.binary_type, bytearray)):
             raise TypeError("bytes/bytearray/unicode/str objects only")
 
         # Append the data for writing - this should not copy the data
