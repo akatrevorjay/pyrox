@@ -1,10 +1,8 @@
 import inspect
-
 from pyrox.http import HttpResponse
 from pyrox.log import get_logger
 
 _LOG = get_logger(__name__)
-
 
 """
 Logging-fu
@@ -14,7 +12,6 @@ _HANDLES_REQ_HEAD = 'Function instance {} handles request head'
 _HANDLES_REQ_BODY = 'Function instance {} handles request body'
 _HANDLES_RES_HEAD = 'Function instance {} handles response head'
 _HANDLES_RES_BODY = 'Function instance {} handles response body'
-
 
 """
 Action enumerations.
@@ -48,6 +45,7 @@ class FilterAction(Exception, object):
                     object is intended to communicate.
         payload     An argument to be passed on to the consumer of this action.
     """
+
     def __init__(self, kind=NEXT_FILTER, payload=None):
         self.kind = kind
         self.payload = payload
@@ -223,6 +221,7 @@ class HttpFilterPipeline(object):
     :param chain: A list of HttpFilter objects organized to act as a pipeline
                   with element 0 being the first to receive events.
     """
+
     def __init__(self):
         self._req_head_chain = list()
         self._req_body_chain = list()
