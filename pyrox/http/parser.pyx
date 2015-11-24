@@ -220,15 +220,13 @@ cdef class HttpEventParser(object):
 
     cdef int _execute(self, char *data, size_t length) except -1:
         cdef int retval
-        try:
-            if self._parser == NULL:
-                raise Exception('Parser destroyed or not initialized!')
 
-            retval = http_parser_exec(
-                self._parser, &self._settings, data, length)
-            if retval:
-                raise Exception('Failed with errno: {}'.format(retval))
-        except Exception as ex:
-            raise
+        if self._parser == NULL:
+            raise Exception('Parser destroyed or not initialized!')
+
+        retval = http_parser_exec(
+            self._parser, &self._settings, data, length)
+        if retval:
+            raise Exception('Failed with errno: {}'.format(retval))
 
         return 0
