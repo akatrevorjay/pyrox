@@ -266,6 +266,9 @@ class HttpMessage(object):
         """
         Switches headers to signify we're using chunked encoding.
         """
+        if self.version == b'1.0':
+            raise Exception("Cannot switch to chunked mode on HTTP/1.0 requests.")
+
         # If there's a content length, negotiate the transfer encoding
         if 'content-length' in self.headers:
             self.headers.pop('content-length')
