@@ -183,7 +183,9 @@ class HttpHeaderCollection(collections.MutableMapping):
             values = self.get(name, default=[], auto_create=False)
             self._header_to_bytes(name, values, data)
 
-        needs_content_length = 'content-length' not in self
+        # TODO This probably shouldn't be done on CONNECT requests.
+        # needs_content_length = 'content-length' not in self
+        needs_content_length = False
         has_transfer_encoding = 'transfer-encoding' in self
 
         if needs_content_length and not has_transfer_encoding:
