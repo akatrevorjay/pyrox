@@ -385,7 +385,7 @@ char * proxy_protocol_state_name(proxy_protocol_state state) {
         case pp_done:
             return "proxy_protocol done";
         case pp_fail:
-            return "proxy_protocol fail"
+            return "proxy_protocol fail";
 
         default:
             return "ERROR - NOT A STATE";
@@ -397,7 +397,7 @@ void set_proxy_protocol_state(http_parser *parser, proxy_protocol_state state) {
 #if DEBUG_OUTPUT
     printf("%s proxy_protocol state changed --> %s\n",
         parser->type == HTTP_REQUEST ? "Request" : "Response",
-        http_proxy_protocol_state_name(state));
+        proxy_protocol_state_name(state));
 #endif
     parser->proxy_protocol_state = state;
 }
