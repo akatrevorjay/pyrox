@@ -285,11 +285,10 @@ int on_data_cb(http_parser *parser, http_data_cb cb) {
     return cb(parser, parser->buffer->bytes, parser->buffer->position);
 }
 
-#if DEBUG_OUTPUT
 char * http_el_state_name(http_el_state state) {
     switch (state) {
         case s_req_proxy_protocol:
-            return "proxy protocol";
+            return "request start proxy protocol";
         case s_req_start:
             return "request start";
         case s_req_method:
@@ -335,7 +334,7 @@ char * http_el_state_name(http_el_state state) {
 char * http_header_state_name(header_state state) {
     switch (state) {
         case h_general:
-            return "general header";
+            return "header general";
         case h_content_length:
             return "header type content length";
         case h_connection:
@@ -349,19 +348,19 @@ char * http_header_state_name(header_state state) {
         case h_transfer_encoding_chunked:
             return "header type transfer encoding chunked";
         case h_matching_transfer_encoding:
-            return "matching header transfer encoding";
+            return "header matching transfer encoding";
         case h_matching_transfer_encoding_chunked:
-            return "matching header transfer encoding chunked";
+            return "header matching transfer encoding chunked";
         case h_matching_con:
-            return "matching header con";
+            return "header matching con";
         case h_matching_content_length:
-            return "matching header content length";
+            return "header matching content length";
         case h_matching_connection:
-            return "matching header connection";
+            return "header matching connection";
         case h_matching_connection_keep_alive:
-            return "matching header connection keep alive";
+            return "header matching connection keep alive";
         case h_matching_connection_close:
-            return "matching header connection close";
+            return "header matching connection close";
 
         default:
             return "ERROR - NOT A STATE";
@@ -391,7 +390,6 @@ char * proxy_protocol_state_name(proxy_protocol_state state) {
             return "ERROR - NOT A STATE";
     }
 }
-#endif
 
 void set_proxy_protocol_state(http_parser *parser, proxy_protocol_state state) {
 #if DEBUG_OUTPUT
