@@ -2,6 +2,7 @@ from libc.stdint cimport uint16_t, uint32_t, uint64_t
 
 
 cdef extern from "http_parser.h":
+
     cdef enum http_parser_type:
         HTTP_REQUEST, HTTP_RESPONSE
 
@@ -35,7 +36,7 @@ cdef extern from "http_parser.h":
         # 7 here is UF_MAX above
         field_data[7] field_data
 
-    ctypedef unsigned long http_parser_version();
+    cdef unsigned long http_parser_version();
 
     cdef struct http_parser:
         # enum http_parser_type
@@ -86,14 +87,25 @@ cdef extern from "http_parser.h":
         http_cb      on_chunk_header
         http_cb      on_chunk_complete
 
+    cdef int HTTP_PARSER_ERRNO(http_parser* p);
+
 
 cdef extern from "http_parser.c":
-    void http_parser_init(http_parser *parser, http_parser_type parser_type)
+    void http_parser_init(http_parser *parser, http_parser_type type)
     size_t http_parser_execute(http_parser *parser,
                                const http_parser_settings *settings,
                                const char *data,
                                size_t len)
     int http_should_keep_alive(const http_parser *parser)
+
+    const char *http_errno_name(int err);
+    const char *http_errno_description(int err);
+
+    void http_parser_url_init(http_parser_url *u);
+    int http_parser_parse_url(const char *buf, size_t buflen,
+                              int is_connect,
+                              http_parser_url *u);
+
     void http_parser_pause(http_parser *parser, int paused)
     int http_body_is_final(const http_parser *parser)
 
