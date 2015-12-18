@@ -4,18 +4,13 @@ from libc.stdlib cimport malloc, free
 
 from cpython cimport bool, PyBytes_FromStringAndSize, PyBytes_FromString
 
-from parser cimport http_parser_type, http_parser, http_parser_settings, http_parser_init, free_http_parser, http_parser_exec, http_should_keep_alive, http_transfer_encoding_chunked, OPT_PROXY_PROTOCOL, http_el_state_name, header_state_name, proxy_protocol_state_name
-
-import traceback
-
-_REQUEST_PARSER = 0
-_RESPONSE_PARSER = 1
+from parser cimport http_parser_type, http_parser, http_parser_settings, http_parser_init, free_http_parser, http_parser_exec, http_should_keep_alive, http_transfer_encoding_chunked, HTTP_REQUEST, HTTP_RESPONSE, OPT_PROXY_PROTOCOL, http_el_state_name, header_state_name, proxy_protocol_state_name, http_el_error_name
 
 def RequestParser(parser_delegate, proxy_protocol=False):
-    return HttpEventParser(parser_delegate, _REQUEST_PARSER, proxy_protocol=proxy_protocol)
+    return HttpEventParser(parser_delegate, HTTP_REQUEST, proxy_protocol=proxy_protocol)
 
 def ResponseParser(parser_delegate):
-    return HttpEventParser(parser_delegate, _RESPONSE_PARSER)
+    return HttpEventParser(parser_delegate, HTTP_RESPONSE)
 
 cdef int on_req_proxy_protocol_inet(http_parser *parser, char *data, size_t length) except -1:
     cdef object app_data = <object> parser.app_data
@@ -154,43 +149,59 @@ cdef class ParserData(object):
         self.delegate = delegate
 
 
-class _State(collections.namedtuple('State', ['code', 'desc'])):
+class _State(object):
+    def __init__(self, code, desc=None):
+        if desc is None:
+            desc = self.to_name(code).decode()
+        self.code = code
+        self.desc = desc
+
+    @classmethod
+    def to_name(cls, code):
+        raise NotImplementedError
+
     def __repr__(self):
         return '<%s %s:%s>' % (self.__class__.__name__, self.code, self.desc)
 
+    def __str__(self):
+        return '%s:%s' % (self.code, self.desc)
+
 
 class ParserState(_State):
-    pass
+    @classmethod
+    def to_name(cls, code):
+        return http_el_state_name(code)
 
 
 class HeaderState(_State):
-    pass
+    @classmethod
+    def to_name(cls, code):
+        return header_state_name(code)
 
 
 class ProxyProtocolState(_State):
-    pass
-
-
-def parser_state_factory(code):
-    desc = http_el_state_name(code)
-    return ParserState(code, desc)
-
-def header_state_factory(code):
-    desc = header_state_name(code)
-    return HeaderState(code, desc)
-
-def proxy_protocol_state_factory(code):
-    desc = proxy_protocol_state_name(code)
-    return ProxyProtocolState(code, desc)
+    @classmethod
+    def to_name(cls, code):
+        return proxy_protocol_state_name(code)
 
 
 class ParserError(Exception):
-    pass
+    def __init__(self, code, desc=None):
+        if desc is None:
+            desc = self.to_name(code).decode()
+        self.code = code
+        self.desc = desc
 
+    @classmethod
+    def to_name(cls, code):
+        return http_el_error_name(code)
 
-def parser_error_factory(code):
-    desc = http_el_error_name(code)
-    return ParserError('%s: %s' % (code, desc))
+    def __repr__(self):
+        return '<%s %s:%s>' % (self.__class__.__name__, self.code, self.desc)
+
+    def __str__(self):
+        return '%s:%s' % (self.code, self.desc)
+
 
 cdef class HttpEventParser(object):
     cdef http_parser *_parser
@@ -198,25 +209,16 @@ cdef class HttpEventParser(object):
     cdef object app_data
 
     def __repr__(self):
-        return '<%s %s %s %s>' % (
-            self.__class__.__name__, self.state, self.header_state, self.proxy_protocol_state,
-        )
-    def __cinit__(self, object delegate, kind=_REQUEST_PARSER, proxy_protocol=False):
-        # set parser type
-        if kind == _REQUEST_PARSER:
-            parser_type = HTTP_REQUEST
-        elif kind == _RESPONSE_PARSER:
-            parser_type = HTTP_RESPONSE
-        else:
-            raise Exception('Kind must be 0 for requests or 1 for responses')
+        return '<%s kind=%s state=%s>' % (self.__class__.__name__, self.kind, self.state)
 
+    def __cinit__(self, object delegate, kind=HTTP_REQUEST, proxy_protocol=False):
         parser_options = 0
         if proxy_protocol:
             parser_options |= OPT_PROXY_PROTOCOL
 
         # initialize parser
         self._parser = <http_parser *> malloc(sizeof(http_parser))
-        http_parser_init(self._parser, parser_type, parser_options)
+        http_parser_init(self._parser, kind, parser_options)
 
         self.app_data = ParserData(delegate)
         self._parser.app_data = <void *> self.app_data
@@ -247,16 +249,29 @@ cdef class HttpEventParser(object):
         self.destroy()
 
     @property
+    def kind(self):
+        if self._parser:
+            return self._parser.type
+
+    @property
+    def options(self):
+        if self._parser:
+            return self._parser.options
+
+    @property
     def state(self):
-        return parser_state_factory(self._parser.state)
+        if self._parser:
+            return ParserState(self._parser.state)
 
     @property
     def header_state(self):
-        return header_state_factory(self._parser.header_state)
+        if self._parser:
+            return HeaderState(self._parser.header_state)
 
     @property
     def proxy_protocol_state(self):
-        return proxy_protocol_state_factory(self._parser.proxy_protocol_state)
+        if self._parser:
+            return ProxyProtocolState(self._parser.proxy_protocol_state)
 
     def execute(self, data):
         if isinstance(data, bytes):
@@ -278,6 +293,6 @@ cdef class HttpEventParser(object):
         retval = http_parser_exec(
             self._parser, &self._settings, data, length)
         if retval:
-            raise parser_error_factory(retval)
+            raise ParserError(retval)
 
         return 0
