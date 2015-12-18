@@ -151,82 +151,82 @@ static const uint8_t normal_url_char[32] = {
 /* Map el_error values to strings for human-readable output */
 static const char *http_el_error_strings[] =
   {
-#define XX(num, name, string) [ELERR_##name] = #string,
+#define XX(num, name, string) [ELERR_##name] = string,
   HTTP_EL_ERROR_MAP(XX)
 #undef XX
   };
 
-char * http_el_error_name(enum http_el_error errno) {
-    return http_el_error_strings[errno];
+const char * http_el_error_name(enum http_el_error error) {
+    unsigned int index;
+    switch(error) {
+#define XX(num, name, string) case ELERR_##name: index = ELERR_##name; break;
+  HTTP_EL_ERROR_MAP(XX)
+#undef XX
+      default: index = ELERR_UNDEFINED;
+    }
+    return http_el_error_strings[index];
 };
-
 
 // States
 
-typedef enum {
-    // Request states
-    s_req_proxy_protocol,
+/* Map state values to strings for human-readable output */
+static const char *http_el_state_strings[] =
+  {
+#define XX(name, string) [s_##name] = string,
+  HTTP_EL_STATE_MAP(XX)
+#undef XX
+  };
 
-    s_req_start,
-    s_req_method,
-    s_req_path,
-
-    // Common states
-    s_http_version_head,
-    s_http_version_major,
-    s_http_version_minor,
-
-    s_header_field_start,
-    s_header_field,
-    s_header_value,
-
-    s_body,
-    s_chunk_size,
-    s_chunk_parameters,
-    s_chunk_data,
-    s_chunk_complete,
-    s_body_complete,
-    s_message_end,
-
-    // Reponse states
-    s_resp_start,
-    s_resp_status,
-    s_resp_rphrase
-} http_el_state;
-
-typedef enum {
-    // Proxy protocol states
-    pp_start,
-    pp_inet,
-    pp_src_addr,
-    pp_dst_addr,
-    pp_src_port,
-    pp_dst_port,
-    pp_done,
-    pp_fail,
-} proxy_protocol_state;
+const char * http_el_state_name(enum http_el_state state) {
+    unsigned int index;
+    switch(state) {
+#define XX(name, string) case s_##name: index = s_##name; break;
+  HTTP_EL_STATE_MAP(XX)
+#undef XX
+      default: index = s_undefined;
+    }
+    return http_el_state_strings[index];
+};
 
 
-typedef enum {
-    // Header states
-    h_general,
-    h_content_length,
-    h_connection,
-    h_connection_keep_alive,
-    h_connection_close,
-    h_transfer_encoding,
-    h_transfer_encoding_chunked,
+/* Map proxy_protocol_state values to strings for human-readable output */
+static const char *proxy_protocol_state_strings[] =
+  {
+#define XX(name, string) [pp_##name] = string,
+  PROXY_PROTOCOL_STATE_MAP(XX)
+#undef XX
+  };
 
-    // Matching states
-    h_matching_transfer_encoding,
-    h_matching_transfer_encoding_chunked,
-    h_matching_con,
-    h_matching_content_length,
-    h_matching_connection,
-    h_matching_connection_keep_alive,
-    h_matching_connection_close
-} header_state;
+const char * proxy_protocol_state_name(enum proxy_protocol_state state) {
+    unsigned int index;
+    switch(state) {
+#define XX(name, string) case pp_##name: index = pp_##name; break;
+  PROXY_PROTOCOL_STATE_MAP(XX)
+#undef XX
+      default: index = pp_undefined;
+    }
+    return proxy_protocol_state_strings[index];
+};
 
+
+/* Map header_state values to strings for human-readable output */
+static const char *header_state_strings[] =
+  {
+#define XX(name, string) [h_##name] = string,
+  HEADER_STATE_MAP(XX)
+#undef XX
+  };
+
+const char * header_state_name(enum header_state state) {
+    unsigned int index;
+    switch(state) {
+#define XX(name, string) case h_##name: index = h_##name; break;
+  HEADER_STATE_MAP(XX)
+#undef XX
+      default: index = h_undefined;
+    }
+    return header_state_strings[index];
+};
 
 
 // Supporting functions
@@ -299,113 +299,7 @@ int on_data_cb(http_parser *parser, http_data_cb cb) {
     return cb(parser, parser->buffer->bytes, parser->buffer->position);
 }
 
-char * http_el_state_name(http_el_state state) {
-    switch (state) {
-        case s_req_proxy_protocol:
-            return "request start proxy protocol";
-        case s_req_start:
-            return "request start";
-        case s_req_method:
-            return "request method";
-        case s_req_path:
-            return "request path";
-        case s_http_version_head:
-            return "http version head";
-        case s_http_version_major:
-            return "http version major";
-        case s_http_version_minor:
-            return "http version minor";
-        case s_header_field_start:
-            return "header field start";
-        case s_header_field:
-            return "header field";
-        case s_header_value:
-            return "header value";
-        case s_body:
-            return "message body";
-        case s_chunk_size:
-            return "chunk size";
-        case s_chunk_parameters:
-            return "chunk parameters";
-        case s_chunk_data:
-            return "chunk data";
-        case s_body_complete:
-            return "body complete";
-        case s_chunk_complete:
-            return "chunk complete";
-        case s_resp_start:
-            return "response start";
-        case s_resp_status:
-            return "response status code";
-        case s_resp_rphrase:
-            return "response reason phrase";
-
-        default:
-            return "ERROR - NOT A STATE";
-    }
-}
-
-char * http_header_state_name(header_state state) {
-    switch (state) {
-        case h_general:
-            return "header general";
-        case h_content_length:
-            return "header type content length";
-        case h_connection:
-            return "header type connection";
-        case h_connection_keep_alive:
-            return "header type connection keep alive";
-        case h_connection_close:
-            return "header type connection close";
-        case h_transfer_encoding:
-            return "header type transfer encoding";
-        case h_transfer_encoding_chunked:
-            return "header type transfer encoding chunked";
-        case h_matching_transfer_encoding:
-            return "header matching transfer encoding";
-        case h_matching_transfer_encoding_chunked:
-            return "header matching transfer encoding chunked";
-        case h_matching_con:
-            return "header matching con";
-        case h_matching_content_length:
-            return "header matching content length";
-        case h_matching_connection:
-            return "header matching connection";
-        case h_matching_connection_keep_alive:
-            return "header matching connection keep alive";
-        case h_matching_connection_close:
-            return "header matching connection close";
-
-        default:
-            return "ERROR - NOT A STATE";
-    }
-}
-
-char * proxy_protocol_state_name(proxy_protocol_state state) {
-    switch (state) {
-        case pp_start:
-            return "proxy_protocol start";
-        case pp_inet:
-            return "proxy_protocol inet";
-        case pp_src_addr:
-            return "proxy_protocol src_addr";
-        case pp_dst_addr:
-            return "proxy_protocol dst_addr";
-        case pp_src_port:
-            return "proxy_protocol src_port";
-        case pp_dst_port:
-            return "proxy_protocol dst_port";
-        case pp_done:
-            return "proxy_protocol done";
-        case pp_fail:
-            return "proxy_protocol fail";
-
-        default:
-            return "ERROR - NOT A STATE";
-    }
-}
-
-void set_proxy_protocol_state(http_parser *parser, proxy_protocol_state state) {
+void set_proxy_protocol_state(http_parser *parser, enum proxy_protocol_state state) {
 #if DEBUG_OUTPUT
     printf("%s proxy_protocol state changed --> %s\n",
         parser->type == HTTP_REQUEST ? "Request" : "Response",
@@ -414,7 +308,7 @@ void set_proxy_protocol_state(http_parser *parser, proxy_protocol_state state) {
     parser->proxy_protocol_state = state;
 }
 
-void set_http_state(http_parser *parser, http_el_state state) {
+void set_http_state(http_parser *parser, enum http_el_state state) {
 #if DEBUG_OUTPUT
     printf("%s state changed --> %s\n",
         parser->type == HTTP_REQUEST ? "Request" : "Response",
@@ -423,11 +317,11 @@ void set_http_state(http_parser *parser, http_el_state state) {
     parser->state = state;
 }
 
-void set_header_state(http_parser *parser, header_state state) {
+void set_header_state(http_parser *parser, enum header_state state) {
 #if DEBUG_OUTPUT
     printf("%s header state changed --> %s\n",
         parser->type == HTTP_REQUEST ? "Request" : "Response",
-        http_header_state_name(state));
+        header_state_name(state));
 #endif
     parser->header_state = state;
 }

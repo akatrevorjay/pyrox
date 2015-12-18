@@ -13,6 +13,8 @@ cdef extern from "http_el.h":
         F_TRAILING = 1 << 4
 
     cdef enum http_el_error:
+        ELERR_UNDEFINED = 0
+
         ELERR_UNCAUGHT = 1
         ELERR_BAD_PARSER_TYPE = 2
         ELERR_BAD_STATE = 3
@@ -85,8 +87,7 @@ cdef extern from "http_el.c":
     int http_should_keep_alive(http_parser *parser)
     int http_transfer_encoding_chunked(http_parser *parser)
 
-    char *http_el_state_name(int state)
-    char *http_header_state_name(int state)
-    char *proxy_protocol_state_name(int state)
-
-    char *http_el_error_name(int errno)
+    const char *http_el_error_name(int error)
+    const char *http_el_state_name(int state)
+    const char *header_state_name(int state)
+    const char *proxy_protocol_state_name(int state)
