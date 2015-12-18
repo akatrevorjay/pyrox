@@ -180,6 +180,11 @@ def parser_proxy_protocol_state_factory(code):
     desc = proxy_protocol_state_name(code)
     return ParserProxyProtocolState(code, desc)
 
+
+class ParserError(Exception):
+    pass
+
+
 cdef class HttpEventParser(object):
     cdef http_parser *_parser
     cdef http_parser_settings _settings
@@ -234,6 +239,7 @@ cdef class HttpEventParser(object):
     def state(self):
         return parser_state_factory(self._parser.state)
 
+    @property
     def header_state(self):
         return parser_header_state_factory(self._parser.header_state)
 
@@ -261,6 +267,10 @@ cdef class HttpEventParser(object):
         retval = http_parser_exec(
             self._parser, &self._settings, data, length)
         if retval:
-            raise Exception('Failed with errno: {}'.format(retval))
+            try:
+                desc = http_el_error_name(retval)
+            except Exception as e:
+                desc = 'Unknown: %s' % e
+            raise ParserError('Failed with errno {}: {}'.format(retval, desc))
 
         return 0

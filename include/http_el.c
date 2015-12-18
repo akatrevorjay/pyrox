@@ -147,6 +147,20 @@ static const uint8_t normal_url_char[32] = {
 #define IS_ADDR_CHAR(c) (IS_NUM(c) || (c) == '.')
 #define IS_PROXY_PROTOCOL_PREFIX(c) ((c) == 'p' || (c) == 'r' || (c) == 'o' || (c) == 'x') || (c) == 'y')
 
+
+/* Map el_error values to strings for human-readable output */
+static const char *http_el_error_strings[] =
+  {
+#define XX(num, name, string) [ELERR_##name] = #string,
+  HTTP_EL_ERROR_MAP(XX)
+#undef XX
+  };
+
+char * http_el_error_name(enum http_el_error errno) {
+    return http_el_error_strings[errno];
+};
+
+
 // States
 
 typedef enum {

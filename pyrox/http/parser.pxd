@@ -88,3 +88,5 @@ cdef extern from "http_el.c":
     char *http_el_state_name(int state)
     char *http_header_state_name(int state)
     char *proxy_protocol_state_name(int state)
+
+    char *http_el_error_name(int errno)
