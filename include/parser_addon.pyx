@@ -1,160 +1,10 @@
-#cython: c_string_encoding=ascii  # for cython>=0.19
-from  libcpp.string  cimport string as libcpp_string
-from  libcpp.set     cimport set as libcpp_set
-from  libcpp.vector  cimport vector as libcpp_vector
-from  libcpp.pair    cimport pair as libcpp_pair
-from  libcpp.map     cimport map  as libcpp_map
-from  smart_ptr cimport shared_ptr
-from  AutowrapRefHolder cimport AutowrapRefHolder
-from  libcpp cimport bool
-from  libc.string cimport const_char
-from cython.operator cimport dereference as deref, preincrement as inc, address as address
 from libc.stdlib cimport malloc, free
 from libc.string cimport strlen
 from cpython cimport bool, PyBytes_FromStringAndSize, PyBytes_FromString
 cimport http_parser
 import collections
 import six
-from http_parser cimport http_cb
-from http_parser cimport http_data_cb
-from http_parser cimport flags as _flags
-from http_parser cimport http_errno as _http_errno
-from http_parser cimport http_method as _http_method
-from http_parser cimport http_parser_type as _http_parser_type
-from http_parser cimport http_parser_url_fields as _http_parser_url_fields
-from http_parser cimport HTTP_PARSER_ERRNO as _HTTP_PARSER_ERRNO_http_parser
-from http_parser cimport http_body_is_final as _http_body_is_final_http_parser
-from http_parser cimport http_errno_description as _http_errno_description_http_parser
-from http_parser cimport http_errno_name as _http_errno_name_http_parser
-from http_parser cimport http_method_str as _http_method_str_http_parser
-from http_parser cimport http_parser_execute as _http_parser_execute_http_parser
-from http_parser cimport http_parser_init as _http_parser_init_http_parser
-from http_parser cimport http_parser_parse_url as _http_parser_parse_url_http_parser
-from http_parser cimport http_parser_pause as _http_parser_pause_http_parser
-from http_parser cimport http_parser_url_init as _http_parser_url_init_http_parser
-from http_parser cimport http_parser_version as _http_parser_version_http_parser
-from http_parser cimport http_should_keep_alive as _http_should_keep_alive_http_parser
-cdef extern from "autowrap_tools.hpp":
-    char * _cast_const_away(char *)
 
-def http_errno_description(int err ):
-    assert err in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31], 'arg err wrong type'
-
-    cdef char  * _r = _cast_const_away(_http_errno_description_http_parser((<_http_errno>err)))
-    py_result = <char *>(_r)
-    return py_result
-
-def http_errno_name(int err ):
-    assert err in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31], 'arg err wrong type'
-
-    cdef char  * _r = _cast_const_away(_http_errno_name_http_parser((<_http_errno>err)))
-    py_result = <char *>(_r)
-    return py_result
-
-def http_method_str(int m ):
-    assert m in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32], 'arg m wrong type'
-
-    cdef char  * _r = _cast_const_away(_http_method_str_http_parser((<_http_method>m)))
-    py_result = <char *>(_r)
-    return py_result
-
-def http_parser_version():
-    cdef unsigned long int _r = _http_parser_version_http_parser()
-    py_result = <unsigned long int>_r
-    return py_result 
-
-cdef class http_errno:
-    HPE_OK = 0
-    HPE_CB_message_begin = 1
-    HPE_CB_url = 2
-    HPE_CB_header_field = 3
-    HPE_CB_header_value = 4
-    HPE_CB_headers_complete = 5
-    HPE_CB_body = 6
-    HPE_CB_message_complete = 7
-    HPE_CB_status = 8
-    HPE_CB_chunk_header = 9
-    HPE_CB_chunk_complete = 10
-    HPE_INVALID_EOF_STATE = 11
-    HPE_HEADER_OVERFLOW = 12
-    HPE_CLOSED_CONNECTION = 13
-    HPE_INVALID_VERSION = 14
-    HPE_INVALID_STATUS = 15
-    HPE_INVALID_METHOD = 16
-    HPE_INVALID_URL = 17
-    HPE_INVALID_HOST = 18
-    HPE_INVALID_PORT = 19
-    HPE_INVALID_PATH = 20
-    HPE_INVALID_QUERY_STRING = 21
-    HPE_INVALID_FRAGMENT = 22
-    HPE_LF_EXPECTED = 23
-    HPE_INVALID_HEADER_TOKEN = 24
-    HPE_INVALID_CONTENT_LENGTH = 25
-    HPE_INVALID_CHUNK_SIZE = 26
-    HPE_INVALID_CONSTANT = 27
-    HPE_INVALID_INTERNAL_STATE = 28
-    HPE_STRICT = 29
-    HPE_PAUSED = 30
-    HPE_UNKNOWN = 31 
-
-cdef class flags:
-    F_CHUNKED = 1
-    F_CONNECTION_KEEP_ALIVE = 2
-    F_CONNECTION_CLOSE = 4
-    F_CONNECTION_UPGRADE = 8
-    F_TRAILING = 16
-    F_UPGRADE = 32
-    F_SKIPBODY = 64 
-
-cdef class http_method:
-    HTTP_DELETE = 0
-    HTTP_GET = 1
-    HTTP_HEAD = 2
-    HTTP_POST = 3
-    HTTP_PUT = 4
-    HTTP_CONNECT = 5
-    HTTP_OPTIONS = 6
-    HTTP_TRACE = 7
-    HTTP_COPY = 8
-    HTTP_LOCK = 9
-    HTTP_MKCOL = 10
-    HTTP_MOVE = 11
-    HTTP_PROPFIND = 12
-    HTTP_PROPPATCH = 13
-    HTTP_SEARCH = 14
-    HTTP_UNLOCK = 15
-    HTTP_BIND = 16
-    HTTP_REBIND = 17
-    HTTP_UNBIND = 18
-    HTTP_ACL = 19
-    HTTP_REPORT = 20
-    HTTP_MKACTIVITY = 21
-    HTTP_CHECKOUT = 22
-    HTTP_MERGE = 23
-    HTTP_MSEARCH = 24
-    HTTP_NOTIFY = 25
-    HTTP_SUBSCRIBE = 26
-    HTTP_UNSUBSCRIBE = 27
-    HTTP_PATCH = 28
-    HTTP_PURGE = 29
-    HTTP_MKCALENDAR = 30
-    HTTP_LINK = 31
-    HTTP_UNLINK = 32 
-
-cdef class http_parser_url_fields:
-    UF_SCHEMA = 0
-    UF_HOST = 1
-    UF_PORT = 2
-    UF_PATH = 3
-    UF_QUERY = 4
-    UF_FRAGMENT = 5
-    UF_USERINFO = 6
-    UF_MAX = 7 
-
-cdef class http_parser_type:
-    HTTP_REQUEST = 0
-    HTTP_RESPONSE = 1
-    HTTP_BOTH = 2 
 try:
     import urllib.parse as urlparse
 except ImportError:
@@ -581,4 +431,5 @@ cdef class HttpUrlParser(object):
                 part = url[f_off:f_off + f_len]
                 ret.append(part)
 
-        return ret 
+        return ret
+

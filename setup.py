@@ -4,6 +4,7 @@ import sys
 import pyrox.about
 
 from setuptools import setup, find_packages, Extension
+import pkg_resources
 
 
 # force setuptools not to convert .pyx to .c in the Extension
@@ -41,14 +42,24 @@ def read(relative):
 
 
 def compile_pyx():
-    ext_modules = list()
+    data_dir = pkg_resources.resource_filename("autowrap", "data_files/autowrap")
+    ext = Extension(
+        'pyrox.http.parser',
+        sources=['pyrox/http/parser.cpp'],
+        language="c++",
+        include_dirs=['include/', data_dir],
+        gdb_debug=True,
+        compiler_directives=dict(
+            # boundscheck=False,
+            # wraparound=False,
 
-    e = Extension('pyrox.http.parser',
-            sources=['pyrox/http/parser.pyx'],
-            include_dirs = ['include/'])
-    ext_modules.append(e)
-
-    return ext_modules
+            embedsignature=True,
+            # profile=True,
+            linetrace=True,
+            # language_level=3,
+        ),
+    )
+    return [ext]
 
 
 # compiler flags
