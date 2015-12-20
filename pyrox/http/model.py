@@ -328,7 +328,7 @@ class HttpResponse(HttpMessage):
     def to_bytes(self):
         data = bytearray()
         data.extend(b'HTTP/')
-        data.extend(self.version)
+        data.extend(_to_bytes(self.version))
         data.extend(b' ')
         data.extend(_to_bytes(self.status))
         data.extend(b'\r\n')
