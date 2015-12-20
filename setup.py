@@ -7,10 +7,10 @@ from setuptools import setup, find_packages, Extension
 import pkg_resources
 
 
-# force setuptools not to convert .pyx to .c in the Extension
-import setuptools.extension
-assert callable(setuptools.extension.have_pyrex), "Requires setuptools 0.6.26 or later"
-setuptools.extension.have_pyrex = lambda: True
+# # force setuptools not to convert .pyx to .c in the Extension
+# import setuptools.extension
+# assert callable(setuptools.extension.have_pyrex), "Requires setuptools 0.6.26 or later"
+# setuptools.extension.have_pyrex = lambda: True
 
 # https://bitbucket.org/pypa/setuptools/issues/288/cannot-specify-cython-under-setup_requires
 class LateResolvedCommandLookup(dict):
@@ -41,26 +41,41 @@ def read(relative):
     return [l for l in contents.split('\n') if l != '']
 
 
-def compile_pyx():
+# TODO False
+COMPILE_PYX = os.environ.get('COMPILE_PYX', True)
+
+
+def get_ext_modules(compile_pyx=COMPILE_PYX):
+    source_ext = compile_pyx and '.pyx' or '.cpp'
+
     data_dir = pkg_resources.resource_filename("autowrap", "data_files/autowrap")
     ext = Extension(
         'pyrox.http.parser',
-        sources=['pyrox/http/parser.cpp'],
+        sources=['pyrox/http/parser%s' % source_ext],
         language="c++",
         include_dirs=['include/', data_dir],
-        gdb_debug=True,
-        compiler_directives=dict(
-            # boundscheck=False,
-            # wraparound=False,
-
-            embedsignature=True,
-            # profile=True,
-            linetrace=True,
-            # language_level=3,
-        ),
     )
-    return [ext]
 
+    ext_modules = [ext]
+
+    if compile_pyx:
+        from Cython.Build import cythonize
+        ext_modules = cythonize(ext_modules,
+            include_path=['include/', data_dir],
+            language="c++",
+            gdb_debug=True,
+            compiler_directives=dict(
+                # boundscheck=False,
+                # wraparound=False,
+
+                embedsignature=True,
+                # profile=True,
+                linetrace=True,
+                # language_level=3,
+            ),
+        )
+
+    return ext_modules
 
 # compiler flags
 CFLAGS = []
@@ -100,11 +115,11 @@ setup(
     install_requires=read('tools/install_requires.txt'),
     test_suite='nose.collector',
     zip_safe=False,
-    package_data={
-        '': ['*.pyx']
-    },
+    # package_data={
+    #     '': ['*.pyx']
+    # },
     include_package_data=True,
     packages=find_packages(exclude=['*.tests']),
-    ext_modules=compile_pyx(),
+    ext_modules=get_ext_modules(),
     cmdclass=LateResolvedCommandLookup(),
 )

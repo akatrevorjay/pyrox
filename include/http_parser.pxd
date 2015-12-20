@@ -3,7 +3,7 @@ from libc.stdint cimport uint16_t, uint32_t, uint64_t
 #from smart_ptr cimport shared_ptr
 
 
-cdef extern from "http_parser.h":
+cdef extern from "http_parser.h" nogil:
     cdef enum http_parser_type:
         HTTP_REQUEST, HTTP_RESPONSE, HTTP_BOTH
 
@@ -83,7 +83,7 @@ cdef extern from "http_parser.h":
         http_cb      on_headers_complete
         http_data_cb on_body
         http_cb      on_message_complete
-        # When on_chunk_header is called, the current chunk length is stored
+        # When on_chunk_header_cb is called, the current chunk length is stored
         # in parser->content_length.
         http_cb      on_chunk_header
         http_cb      on_chunk_complete
@@ -161,23 +161,23 @@ cdef extern from "http_parser.h":
 
 
 cdef extern from "http_parser.c":
-    void http_parser_init(http_parser *parser, http_parser_type type);  # wrap-ignore
+    void http_parser_init(http_parser *parser, http_parser_type type) nogil;  # wrap-ignore
     size_t http_parser_execute(http_parser *parser,
                                const http_parser_settings *settings,
                                const char *data,
                                size_t len); # wrap-ignore
-    int http_should_keep_alive(const http_parser *parser);  # wrap-ignore
+    int http_should_keep_alive(const http_parser *parser) nogil;  # wrap-ignore
 
-    const char *http_method_str(http_method m);
-    const char *http_errno_name(http_errno err);
-    const char *http_errno_description(http_errno err);
+    const char *http_method_str(http_method m) nogil;
+    const char *http_errno_name(http_errno err) nogil;
+    const char *http_errno_description(http_errno err) nogil;
 
-    void http_parser_url_init(http_parser_url *u);  # wrap-ignore
+    void http_parser_url_init(http_parser_url *u) nogil;  # wrap-ignore
     int http_parser_parse_url(const char *buf, size_t buflen,
                               int is_connect,
                               http_parser_url *u);  # wrap-ignore
 
-    void http_parser_pause(http_parser *parser, int paused)  # wrap-ignore
-    int http_body_is_final(const http_parser *parser)  # wrap-ignore
+    void http_parser_pause(http_parser *parser, int paused) nogil;  # wrap-ignore
+    int http_body_is_final(const http_parser *parser) nogil;  # wrap-ignore
 
 

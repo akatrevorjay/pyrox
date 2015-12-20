@@ -12,7 +12,8 @@ from cython.operator cimport dereference as deref, preincrement as inc, address 
 from libc.stdlib cimport malloc, free
 from libc.string cimport strlen
 from cpython cimport bool, PyBytes_FromStringAndSize, PyBytes_FromString
-cimport http_parser
+from cpython.version cimport PY_MAJOR_VERSION
+cimport http_parser as hp
 import collections
 import six
 from http_parser cimport http_cb
@@ -63,6 +64,16 @@ def http_parser_version():
     py_result = <unsigned long int>_r
     return py_result 
 
+cdef class http_parser_url_fields:
+    UF_SCHEMA = 0
+    UF_HOST = 1
+    UF_PORT = 2
+    UF_PATH = 3
+    UF_QUERY = 4
+    UF_FRAGMENT = 5
+    UF_USERINFO = 6
+    UF_MAX = 7 
+
 cdef class http_errno:
     HPE_OK = 0
     HPE_CB_message_begin = 1
@@ -97,14 +108,10 @@ cdef class http_errno:
     HPE_PAUSED = 30
     HPE_UNKNOWN = 31 
 
-cdef class flags:
-    F_CHUNKED = 1
-    F_CONNECTION_KEEP_ALIVE = 2
-    F_CONNECTION_CLOSE = 4
-    F_CONNECTION_UPGRADE = 8
-    F_TRAILING = 16
-    F_UPGRADE = 32
-    F_SKIPBODY = 64 
+cdef class http_parser_type:
+    HTTP_REQUEST = 0
+    HTTP_RESPONSE = 1
+    HTTP_BOTH = 2 
 
 cdef class http_method:
     HTTP_DELETE = 0
@@ -141,104 +148,139 @@ cdef class http_method:
     HTTP_LINK = 31
     HTTP_UNLINK = 32 
 
-cdef class http_parser_url_fields:
-    UF_SCHEMA = 0
-    UF_HOST = 1
-    UF_PORT = 2
-    UF_PATH = 3
-    UF_QUERY = 4
-    UF_FRAGMENT = 5
-    UF_USERINFO = 6
-    UF_MAX = 7 
-
-cdef class http_parser_type:
-    HTTP_REQUEST = 0
-    HTTP_RESPONSE = 1
-    HTTP_BOTH = 2 
+cdef class flags:
+    F_CHUNKED = 1
+    F_CONNECTION_KEEP_ALIVE = 2
+    F_CONNECTION_CLOSE = 4
+    F_CONNECTION_UPGRADE = 8
+    F_TRAILING = 16
+    F_UPGRADE = 32
+    F_SKIPBODY = 64 
 try:
     import urllib.parse as urlparse
 except ImportError:
     import urlparse
 
-def to_bytes(data):
-    if isinstance(data, bytes):
-        pass
-    elif isinstance(data, unicode):
-        data = data.encode('utf8')
-    elif isinstance(data, (list, bytearray)):
-        data = bytes(data)
-    else:
-        raise Exception('Can not coerce type: {} into bytes.'.format(type(data)))
-    return data
 
-cdef int on_message_begin(http_parser.http_parser *parser) except -1:
+# define a global name for whatever char type is used in the module
+ctypedef unsigned char char_type
+
+cdef char_type[:] _chars(s):
+    if isinstance(s, unicode):
+        # encode to the specific encoding used inside of the module
+        s = (<unicode>s).encode('utf8')
+    return s
+
+
+cdef unicode tounicode(char* s):
+    return s.decode('UTF-8', 'strict')
+
+
+cdef unicode tounicode_with_length(char* s, size_t length):
+    return s[:length].decode('UTF-8', 'strict')
+
+
+cdef unicode tounicode_with_length_and_free(char* s, size_t length):
+    try:
+        return s[:length].decode('UTF-8', 'strict')
+    finally:
+        free(s)
+
+
+cdef unicode _ustring(s):
+    if type(s) is unicode:
+        # fast path for most common case(s)
+        return <unicode>s
+    elif PY_MAJOR_VERSION < 3 and isinstance(s, bytes):
+        # only accept byte strings in Python 2.x, not in Py3
+        return (<bytes>s).decode('ascii')
+    elif isinstance(s, unicode):
+        # an evil cast to <unicode> might work here in some(!) cases,
+        # depending on what the further processing does.  to be safe,
+        # we can always create a copy instead
+        return unicode(s)
+    else:
+        raise TypeError('Can not coerce type: {} into unicode.'.format(type(s)))
+
+
+cdef bytes _bstring(s):
+    if isinstance(s, bytes):
+        pass
+    elif isinstance(s, unicode):
+        s = s.encode('utf8')
+    elif isinstance(s, (list, bytearray)):
+        s = bytes(s)
+    else:
+        raise TypeError('Can not coerce type: {} into bytes.'.format(type(s)))
+    return s
+
+
+cdef int on_message_begin_cb(hp.http_parser *parser) except -1:
     cdef object parser_data = <object> parser.data
     parser_data.delegate.on_message_begin()
     return 0
 
-cdef int on_req_url(http_parser.http_parser *parser, char *data, size_t length) except -1:
-    """ Request only """
+
+cdef int on_req_url_cb(hp.http_parser *parser, char *data, size_t length) except -1:
     cdef object parser_data = <object> parser.data
-    cdef http_parser.http_method method_int = <http_parser.http_method> parser.method
-    cdef const char* method = http_parser.http_method_str(method_int)
+    cdef hp.http_method method_int = <hp.http_method> parser.method
+    cdef const char* method = hp.http_method_str(method_int)
     cdef object url = PyBytes_FromStringAndSize(data, length)
-    parser_data.delegate.on_req_method(method)
+    parser_data.delegate.on_req_method(<hp.http_method> parser.method)
     parser_data.delegate.on_req_url(url)
     return 0
 
-cdef int on_resp_status(http_parser.http_parser *parser, char *data, size_t length) except -1:
-    """ Response only """
+
+cdef int on_resp_status_cb(hp.http_parser *parser, char *data, size_t length) except -1:
     cdef object parser_data = <object> parser.data
     cdef object status = PyBytes_FromStringAndSize(data, length)
     parser_data.delegate.on_resp_status(parser.status_code, status)
     return 0
 
-cdef int on_header_field(http_parser.http_parser *parser, char *data, size_t length) except -1:
+cdef int on_header_field_cb(hp.http_parser *parser, char *data, size_t length) except -1:
     cdef object parser_data = <object> parser.data
     cdef object header_field = PyBytes_FromStringAndSize(data, length)
     parser_data.delegate.on_header_field(header_field)
     return 0
 
-cdef int on_header_value(http_parser.http_parser *parser, char *data, size_t length) except -1:
+cdef int on_header_value_cb(hp.http_parser *parser, char *data, size_t length) except -1:
     cdef object parser_data = <object> parser.data
     cdef object header_value = PyBytes_FromStringAndSize(data, length)
     parser_data.delegate.on_header_value(header_value)
     return 0
 
-cdef int on_headers_complete(http_parser.http_parser *parser) except -1:
+cdef int on_headers_complete_cb(hp.http_parser *parser) except -1:
     cdef object parser_data = <object> parser.data
     parser_data.delegate.on_http_version(parser.http_major, parser.http_minor)
     parser_data.delegate.on_headers_complete(
-        keep_alive=parser_data.parent.should_keep_alive(),
-        #flags=parser_data._flags_bits,
+        keep_alive=parser_data.parser.should_keep_alive(),
     )
     return 0
 
-cdef int on_body(http_parser.http_parser *parser, char *data, size_t length) except -1:
+cdef int on_body_cb(hp.http_parser *parser, char *data, size_t length) except -1:
     cdef object parser_data = <object> parser.data
     cdef object body = PyBytes_FromStringAndSize(data, length)
     parser_data.delegate.on_body(
         body,
         length,
-        is_chunked=parser_data.has_chunked_flag,
+        is_chunked=parser_data.parser.is_chunked,
     )
     return 0
 
-cdef int on_message_complete(http_parser.http_parser *parser) except -1:
+cdef int on_message_complete_cb(hp.http_parser *parser) except -1:
     cdef object parser_data = <object> parser.data
     parser_data.delegate.on_message_complete(
-        is_chunked=parser_data.has_chunked_flag,
-        keep_alive=parser_data.parent.should_keep_alive(),
-        #flags=parser_data._flags_bits,
+        is_chunked=parser_data.parser.is_chunked,
+        keep_alive=parser_data.parser.should_keep_alive(),
     )
     return 0
 
-cdef int on_chunk_header(http_parser.http_parser *parser) except -1:
+cdef int on_chunk_header_cb(hp.http_parser *parser) except -1:
     cdef object parser_data = <object> parser.data
     parser_data.delegate.on_chunk_header()
     return 0
 
-cdef int on_chunk_complete(http_parser.http_parser *parser) except -1:
+cdef int on_chunk_complete_cb(hp.http_parser *parser) except -1:
     cdef object parser_data = <object> parser.data
     parser_data.delegate.on_chunk_complete()
     return 0
@@ -286,97 +328,48 @@ class ParserDelegate(object):
 
 
 cdef class _ParserData(object):
-    cdef public object parent
+    cdef public object parser
     cdef public object delegate
 
-    def __cinit__(self, object parent, object delegate):
-        self.parent = parent
+    def __cinit__(self, object parser, object delegate):
+        self.parser = parser
         self.delegate = delegate
-
-    def should_keep_alive(self):
-        return self.parent.should_keep_alive()
-
-    def body_is_final(self):
-        return self.parent.body_is_final()
-
-    @property
-    def _flags_bits(self):
-        return self.parent._flags_bits
-
-    @property
-    def has_chunked_flag(self):
-        return bool(self._flags_bits & http_parser.F_CHUNKED)
-
-    @property
-    def has_connection_keep_alive_flag(self):
-        return bool(self._flags_bits & http_parser.F_CONNECTION_KEEP_ALIVE)
-
-    @property
-    def has_connection_close_flag(self):
-        return bool(self._flags_bits & http_parser.F_CONNECTION_CLOSE)
-
-    @property
-    def has_connection_upgrade_flag(self):
-        return bool(self._flags_bits & http_parser.F_CONNECTION_UPGRADE)
-
-    @property
-    def has_trailing_flag(self):
-        return bool(self._flags_bits & http_parser.F_TRAILING)
-
-    @property
-    def has_upgrade_flag(self):
-        return bool(self._flags_bits & http_parser.F_UPGRADE)
-
-    @property
-    def has_skipbody_flag(self):
-        return bool(self._flags_bits & http_parser.F_SKIPBODY)
 
 
 cdef class Parser(object):
-    cdef http_parser.http_parser *_parser
-    cdef http_parser.http_parser_settings _settings
-    cdef public object delegate
-    cdef public object data
+    cdef hp.http_parser _parser
+    cdef hp.http_parser_settings _settings
+    cdef public object _delegate
+    cdef object _data
 
-    def __cinit__(self, http_parser.http_parser_type parser_type, object delegate):
+    def __init__(self, hp.http_parser_type parser_type, object delegate):
         # init parser
-        self._parser = <http_parser.http_parser *> malloc(sizeof(http_parser.http_parser))
-        http_parser.http_parser_init(self._parser, parser_type)
+        hp.http_parser_init(&self._parser, parser_type)
 
-        self.delegate = delegate
-        self.data = _ParserData(self, delegate)
-        self._parser.data = <void *> self.data
+        self._delegate = delegate
+        self._data = _ParserData(self, delegate)
+        self._parser.data = <void *> self._data
 
         # set callbacks
-        self._settings.on_message_begin = <http_cb> on_message_begin
-        self._settings.on_url = <http_data_cb> on_req_url
-        self._settings.on_status = <http_data_cb> on_resp_status
-        self._settings.on_header_field = <http_data_cb> on_header_field
-        self._settings.on_header_value = <http_data_cb> on_header_value
-        self._settings.on_headers_complete = <http_cb> on_headers_complete
-        self._settings.on_body = <http_data_cb> on_body
-        self._settings.on_message_complete = <http_cb> on_message_complete
-        self._settings.on_chunk_header = <http_cb> on_chunk_header
-        self._settings.on_chunk_complete = <http_cb> on_chunk_complete
+        self._settings.on_message_begin = <http_cb> on_message_begin_cb
+        self._settings.on_url = <http_data_cb> on_req_url_cb
+        self._settings.on_status = <http_data_cb> on_resp_status_cb
+        self._settings.on_header_field = <http_data_cb> on_header_field_cb
+        self._settings.on_header_value = <http_data_cb> on_header_value_cb
+        self._settings.on_headers_complete = <http_cb> on_headers_complete_cb
+        self._settings.on_body = <http_data_cb> on_body_cb
+        self._settings.on_message_complete = <http_cb> on_message_complete_cb
+        self._settings.on_chunk_header = <http_cb> on_chunk_header_cb
+        self._settings.on_chunk_complete = <http_cb> on_chunk_complete_cb
 
-    def destroy(self):
-        if self._parser != NULL:
-            free(self._parser)
-            self._parser = NULL
-
-    def __dealloc__(self):
-        self.destroy()
-
-    def execute(self, data):
-        data = to_bytes(data)
+    cpdef int execute(self, object data):
+        data = _bstring(data)
         return self._execute(data, len(data))
 
     cdef int _execute(self, char *data, size_t length) except -1:
         cdef int nparsed
 
-        self._assert_parser()
-
-        nparsed = http_parser.http_parser_execute(self._parser, &self._settings, data, length)
+        nparsed = hp.http_parser_execute(&self._parser, &self._settings, data, length)
 
         if nparsed != length:
             self._raise_errno_if_needed()
@@ -384,88 +377,90 @@ cdef class Parser(object):
 
         # Check to see if parser exited due to an upgrade
         if self._parser.upgrade == 1:
-            self.delegate.on_upgrade()
+            self._delegate.on_upgrade()
 
         return nparsed
 
     cdef int _raise_errno_if_needed(self) except -1:
-        cdef http_parser.http_errno errno = http_parser.HTTP_PARSER_ERRNO(self._parser)
+        cdef hp.http_errno errno = hp.HTTP_PARSER_ERRNO(&self._parser)
         cdef const char * name
         cdef const char * desc
 
-        if errno == http_parser.HPE_OK:
+        if errno == hp.HPE_OK:
             return 0
 
-        name = http_parser.http_errno_name(errno)
-        desc = http_parser.http_errno_description(errno)
+        name = hp.http_errno_name(errno)
+        desc = hp.http_errno_description(errno)
         raise Exception('Parser gave error {errno}/{name}: {desc}'.format(errno=<int>errno,
                                                                             name=name,
                                                                             desc=desc))
 
-    cdef int _assert_parser(self) except -1:
-        if self._parser == NULL:
-            raise Exception('Parser destroyed or not initialized!')
-
     def pause(self):
-        self._assert_parser()
-        http_parser.http_parser_pause(self._parser, 1)
+        hp.http_parser_pause(&self._parser, 1)
 
     def resume(self):
-        self._assert_parser()
-        http_parser.http_parser_pause(self._parser, 0)
+        hp.http_parser_pause(&self._parser, 0)
 
     def body_is_final(self):
-        self._assert_parser()
-        return bool(http_parser.http_body_is_final(self._parser))
+        return bool(hp.http_body_is_final(&self._parser))
 
     def should_keep_alive(self):
-        self._assert_parser()
-        return bool(http_parser.http_should_keep_alive(self._parser))
+        return bool(hp.http_should_keep_alive(&self._parser))
+
+    @property
+    def method(self):
+        return http_method_str(self._parser.method)
 
     @property
     def _flags_bits(self):
-        self._assert_parser()
         return self._parser.flags
 
     @property
     def has_chunked_flag(self):
-        return bool(self._flags_bits & http_parser.F_CHUNKED)
+        return bool(self._flags_bits & hp.F_CHUNKED)
+
+    is_chunked = has_chunked_flag
 
     @property
     def has_connection_keep_alive_flag(self):
-        return bool(self._flags_bits & http_parser.F_CONNECTION_KEEP_ALIVE)
+        return bool(self._flags_bits & hp.F_CONNECTION_KEEP_ALIVE)
 
     @property
     def has_connection_close_flag(self):
-        return bool(self._flags_bits & http_parser.F_CONNECTION_CLOSE)
+        return bool(self._flags_bits & hp.F_CONNECTION_CLOSE)
 
     @property
     def has_connection_upgrade_flag(self):
-        return bool(self._flags_bits & http_parser.F_CONNECTION_UPGRADE)
+        return bool(self._flags_bits & hp.F_CONNECTION_UPGRADE)
 
     @property
     def has_trailing_flag(self):
-        return bool(self._flags_bits & http_parser.F_TRAILING)
+        return bool(self._flags_bits & hp.F_TRAILING)
 
     @property
     def has_upgrade_flag(self):
-        return bool(self._flags_bits & http_parser.F_UPGRADE)
+        return bool(self._flags_bits & hp.F_UPGRADE)
 
     @property
     def has_skipbody_flag(self):
-        return bool(self._flags_bits & http_parser.F_SKIPBODY)
+        return bool(self._flags_bits & hp.F_SKIPBODY)
 
 
 def BothParser(parser_delegate):
-    return Parser(http_parser.HTTP_BOTH, parser_delegate)
+    return Parser(hp.HTTP_BOTH, parser_delegate)
 
 
 def RequestParser(parser_delegate):
-    return Parser(http_parser.HTTP_REQUEST, parser_delegate)
+    return Parser(hp.HTTP_REQUEST, parser_delegate)
 
 
 def ResponseParser(parser_delegate):
-    return Parser(http_parser.HTTP_RESPONSE, parser_delegate)
+    return Parser(hp.HTTP_RESPONSE, parser_delegate)
+
+
+'''
+URL Parser
+'''
 
 
 class ParseResult(collections.namedtuple('ParseResult',
@@ -532,13 +527,13 @@ class ParseResult(collections.namedtuple('ParseResult',
 
 
 cdef class HttpUrlParser(object):
-    cdef http_parser.http_parser_url *_parser
+    cdef hp.http_parser_url *_parser
     cdef object data
 
     def __cinit__(self):
         # init parser
-        self._parser = <http_parser.http_parser_url *> malloc(sizeof(http_parser.http_parser_url))
-        http_parser.http_parser_url_init(self._parser)
+        self._parser = <hp.http_parser_url *> malloc(sizeof(hp.http_parser_url))
+        hp.http_parser_url_init(self._parser)
 
     def destroy(self):
         if self._parser != NULL:
@@ -549,7 +544,7 @@ cdef class HttpUrlParser(object):
         self.destroy()
 
     def parse(self, url, is_connect):
-        url = to_bytes(url)
+        url = _bstring(url)
         ret = self._parse(url, len(url), is_connect)
         return ParseResult(*ret)
 
@@ -560,13 +555,13 @@ cdef class HttpUrlParser(object):
         if self._parser == NULL:
             raise Exception('Parser destroyed or not initialized!')
 
-        rv = http_parser.http_parser_parse_url(url, length, is_connect, self._parser)
+        rv = hp.http_parser_parse_url(url, length, is_connect, self._parser)
         if rv != 0:
             raise Exception('URL Parser gave error: {rv}'.format(rv=rv))
 
         ret = []
-        for i in range(http_parser.UF_MAX):
-            if i == http_parser.UF_PORT:
+        for i in range(hp.UF_MAX):
+            if i == hp.UF_PORT:
                 # This is so it's an integer as expected
                 if self._parser.port:
                     ret.append(self._parser.port)

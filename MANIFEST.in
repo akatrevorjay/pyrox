@@ -3,3 +3,4 @@ include include/*
 include pyrox/VERSION
 include pyrox/http/*.pyx
 include pyrox/http/*.pxd
+include pyrox/http/*.cpp
