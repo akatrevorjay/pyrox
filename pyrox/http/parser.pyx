@@ -64,6 +64,41 @@ def http_parser_version():
     py_result = <unsigned long int>_r
     return py_result 
 
+cdef class http_method:
+    HTTP_DELETE = 0
+    HTTP_GET = 1
+    HTTP_HEAD = 2
+    HTTP_POST = 3
+    HTTP_PUT = 4
+    HTTP_CONNECT = 5
+    HTTP_OPTIONS = 6
+    HTTP_TRACE = 7
+    HTTP_COPY = 8
+    HTTP_LOCK = 9
+    HTTP_MKCOL = 10
+    HTTP_MOVE = 11
+    HTTP_PROPFIND = 12
+    HTTP_PROPPATCH = 13
+    HTTP_SEARCH = 14
+    HTTP_UNLOCK = 15
+    HTTP_BIND = 16
+    HTTP_REBIND = 17
+    HTTP_UNBIND = 18
+    HTTP_ACL = 19
+    HTTP_REPORT = 20
+    HTTP_MKACTIVITY = 21
+    HTTP_CHECKOUT = 22
+    HTTP_MERGE = 23
+    HTTP_MSEARCH = 24
+    HTTP_NOTIFY = 25
+    HTTP_SUBSCRIBE = 26
+    HTTP_UNSUBSCRIBE = 27
+    HTTP_PATCH = 28
+    HTTP_PURGE = 29
+    HTTP_MKCALENDAR = 30
+    HTTP_LINK = 31
+    HTTP_UNLINK = 32 
+
 cdef class http_parser_url_fields:
     UF_SCHEMA = 0
     UF_HOST = 1
@@ -73,6 +108,15 @@ cdef class http_parser_url_fields:
     UF_FRAGMENT = 5
     UF_USERINFO = 6
     UF_MAX = 7 
+
+cdef class flags:
+    F_CHUNKED = 1
+    F_CONNECTION_KEEP_ALIVE = 2
+    F_CONNECTION_CLOSE = 4
+    F_CONNECTION_UPGRADE = 8
+    F_TRAILING = 16
+    F_UPGRADE = 32
+    F_SKIPBODY = 64 
 
 cdef class http_errno:
     HPE_OK = 0
@@ -112,50 +156,6 @@ cdef class http_parser_type:
     HTTP_REQUEST = 0
     HTTP_RESPONSE = 1
     HTTP_BOTH = 2 
-
-cdef class http_method:
-    HTTP_DELETE = 0
-    HTTP_GET = 1
-    HTTP_HEAD = 2
-    HTTP_POST = 3
-    HTTP_PUT = 4
-    HTTP_CONNECT = 5
-    HTTP_OPTIONS = 6
-    HTTP_TRACE = 7
-    HTTP_COPY = 8
-    HTTP_LOCK = 9
-    HTTP_MKCOL = 10
-    HTTP_MOVE = 11
-    HTTP_PROPFIND = 12
-    HTTP_PROPPATCH = 13
-    HTTP_SEARCH = 14
-    HTTP_UNLOCK = 15
-    HTTP_BIND = 16
-    HTTP_REBIND = 17
-    HTTP_UNBIND = 18
-    HTTP_ACL = 19
-    HTTP_REPORT = 20
-    HTTP_MKACTIVITY = 21
-    HTTP_CHECKOUT = 22
-    HTTP_MERGE = 23
-    HTTP_MSEARCH = 24
-    HTTP_NOTIFY = 25
-    HTTP_SUBSCRIBE = 26
-    HTTP_UNSUBSCRIBE = 27
-    HTTP_PATCH = 28
-    HTTP_PURGE = 29
-    HTTP_MKCALENDAR = 30
-    HTTP_LINK = 31
-    HTTP_UNLINK = 32 
-
-cdef class flags:
-    F_CHUNKED = 1
-    F_CONNECTION_KEEP_ALIVE = 2
-    F_CONNECTION_CLOSE = 4
-    F_CONNECTION_UPGRADE = 8
-    F_TRAILING = 16
-    F_UPGRADE = 32
-    F_SKIPBODY = 64 
 try:
     import urllib.parse as urlparse
 except ImportError:
