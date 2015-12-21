@@ -223,10 +223,8 @@ cdef int on_message_begin_cb(hp.http_parser *parser) except -1:
 
 cdef int on_req_url_cb(hp.http_parser *parser, char *data, size_t length) except -1:
     cdef object parser_data = <object> parser.data
-    cdef hp.http_method method_int = <hp.http_method> parser.method
-    cdef const char* method = hp.http_method_str(method_int)
     cdef object url = PyBytes_FromStringAndSize(data, length)
-    parser_data.delegate.on_req_method(<hp.http_method> parser.method)
+    parser_data.delegate.on_req_method(parser_data.parser.method)
     parser_data.delegate.on_req_url(url)
     return 0
 
