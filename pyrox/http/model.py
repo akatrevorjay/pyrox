@@ -337,7 +337,7 @@ class HttpResponse(HttpMessage):
         else:
             value = _to_bytes(value)
             value = value.split(b' ', 1)
-            self.status_code = value[0]
+            self.status_code = int(value[0])
             if len(value) == 2:
                 self.status_desc = value[1]
 
