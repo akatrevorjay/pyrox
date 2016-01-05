@@ -47,16 +47,18 @@ COMPILE_PYX = os.environ.get('COMPILE_PYX', True)
 
 def get_ext_modules(compile_pyx=COMPILE_PYX):
     source_ext = compile_pyx and '.pyx' or '.cpp'
-
+    ext_modules = []
     data_dir = pkg_resources.resource_filename("autowrap", "data_files/autowrap")
+
     ext = Extension(
         'pyrox.http.parser',
-        sources=['pyrox/http/parser%s' % source_ext],
+        sources=[
+            'pyrox/http/parser%s' % source_ext,
+        ],
         language="c++",
         include_dirs=['include/', data_dir],
     )
-
-    ext_modules = [ext]
+    ext_modules.append(ext)
 
     if compile_pyx:
         from Cython.Build import cythonize
