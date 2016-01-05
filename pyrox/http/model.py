@@ -67,7 +67,7 @@ class HttpHeaderCollection(collections.MutableMapping):
     def __getitem__(self, key, auto_create=True):
         tkey = self.__key_transform__(key)
 
-        if tkey not in self._store and auto_create:
+        if auto_create and tkey not in self._store:
             self[key] = None
 
         return self._store[tkey]
