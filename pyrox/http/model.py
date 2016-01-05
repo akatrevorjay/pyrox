@@ -323,7 +323,23 @@ class HttpResponse(HttpMessage):
                     potentially its human readable component delimited by
                     a single space.
     """
-    status = None
+    status_code = None
+    status_desc = b'Unknown'
+
+    @property
+    def status(self):
+        return b'%d %s' % (self.status_code, self.status_desc)
+
+    @status.setter
+    def status(self, value):
+        if isinstance(value, int):
+            self.status_code = value
+        else:
+            value = _to_bytes(value)
+            value = value.split(b' ', 1)
+            self.status_code = value[0]
+            if len(value) == 2:
+                self.status_desc = value[1]
 
     def to_bytes(self):
         data = bytearray()
