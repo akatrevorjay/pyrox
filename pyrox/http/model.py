@@ -262,8 +262,7 @@ class HttpMessage(object):
             raise Exception("Cannot switch to chunked mode on HTTP/1.0 requests.")
 
         # If there's a content length, negotiate the transfer encoding
-        if 'content-length' in self.headers:
-            self.headers.pop('content-length')
+        self.headers.pop('content-length', default=None)
 
         # Set to chunked to make the transfer easier
         self.headers['transfer-encoding'] = 'chunked'
@@ -288,9 +287,9 @@ class HttpRequest(HttpMessage):
     """
     method = None
     url = None
+    is_upgrade = None
     socket_client_address = None
     _client_address = None
-    is_upgrade = None
 
     @property
     def client_address(self):

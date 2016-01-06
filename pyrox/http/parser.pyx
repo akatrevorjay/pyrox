@@ -566,6 +566,10 @@ cdef class HttpParser(object):
         barray[0:m] = data
         return m
 
+    def is_chunked(self):
+        """ return True if Transfer-Encoding header value is chunked"""
+        return self.has_chunked_flag
+
     def is_upgrade(self):
         """ Do we get upgrade header in the request. Useful for
         websockets """
@@ -586,7 +590,3 @@ cdef class HttpParser(object):
     def is_message_complete(self):
         """ return True if the parsing is done (we get EOF) """
         return self._data.message_complete
-
-    def is_chunked(self):
-        """ return True if Transfer-Encoding header value is chunked"""
-        return self.has_chunked_flag
