@@ -152,17 +152,20 @@ cdef class http_parser_type:
     HTTP_BOTH = 2
 
 cimport pyrox.http._joyent_http_parser as hp
+from .model import HttpHeaderCollection
 
 try:
     import urllib.parse as urlparse
 except ImportError:
     import urlparse
-from .model import HttpHeaderCollection
 
 cdef int on_message_begin_cb(hp.http_parser *parser) except -1:
     cdef object parser_data = <object> parser.data
+
+    # If we've been here before, reset our data object
     if parser_data.message_begin:
         parser_data.reset()
+
     parser_data.message_begin = True
     return 0
 
@@ -170,11 +173,6 @@ cdef int on_req_url_cb(hp.http_parser *parser, char *data, size_t length) except
     cdef object parser_data = <object> parser.data
     cdef bytes url_fragment = PyBytes_FromStringAndSize(data, length)
     parser_data.url += url_fragment
-
-    # # Set method while we're at it
-    # if not parser_data.method:
-    #     parser_data.method = http_method_str(parser.method)
-
     return 0
 
 cdef int on_resp_status_cb(hp.http_parser *parser, char *data, size_t length) except -1:
@@ -187,26 +185,30 @@ cdef int on_header_field_cb(hp.http_parser *parser, char *data, size_t length) e
     cdef object parser_data = <object> parser.data
     cdef bytes header_field = PyBytes_FromStringAndSize(data, length)
 
+    # Reset our buffer if need be
     if parser_data._last_was_value:
         parser_data._last_field = b""
+        parser_data._last_was_value = False
+
     parser_data._last_field += header_field
-    parser_data._last_was_value = False
+
     return 0
 
 cdef int on_header_value_cb(hp.http_parser *parser, char *data, size_t length) except -1:
     cdef object parser_data = <object> parser.data
     cdef bytes header_value = PyBytes_FromStringAndSize(data, length)
 
+    parser_data._last_was_value = True
+
     # add to headers
     parser_data.headers[parser_data._last_field].append(header_value)
-    parser_data._last_was_value = True
+
     return 0
 
 cdef int on_headers_complete_cb(hp.http_parser *parser) except -1:
     cdef object parser_data = <object> parser.data
     parser_data.headers_complete = True
 
-    # parser_data.delegate.on_http_version(parser.http_major, parser.http_minor)
     # parser_data.delegate.on_headers_complete(
     #     keep_alive=parser_data.parser.should_keep_alive(),
     # )
@@ -229,7 +231,6 @@ cdef int on_headers_complete_cb(hp.http_parser *parser) except -1:
 cdef int on_body_cb(hp.http_parser *parser, char *data, size_t length) except -1:
     cdef object parser_data = <object> parser.data
     cdef object body = PyBytes_FromStringAndSize(data, length)
-    # parser_data.partial_body = True
 
     # parser_data.delegate.on_body(
     #     body,
@@ -294,12 +295,10 @@ class _ParserData(object):
         self.headers = self._headers_factory()
         self.body = self._body_factory()
 
-        self.chunked = False
-
+        # State
         self.message_begin = False
         self.message_complete = False
         self.headers_complete = False
-        # self.partial_body = False
 
         self.decompressobj = None
         self._decompress_first_try = True
@@ -343,7 +342,6 @@ cdef class HttpParser(object):
 
         self._data = self._parser_data_factory()
         self._parser.data = <void *> self._data
-        self._reset()
 
         # set callbacks
         self._settings.on_message_begin = <http_cb> on_message_begin_cb
@@ -407,9 +405,9 @@ cdef class HttpParser(object):
     def should_keep_alive(self):
         return bool(hp.http_should_keep_alive(&self._parser))
 
-    # @property
-    # def method(self):
-    #     return http_method_str(self._parser.method)
+    def get_status_desc(self):
+        """ get status reason of a response as bytes """
+        return self._data.status_desc
 
     @property
     def _flags_bits(self):
@@ -442,10 +440,6 @@ cdef class HttpParser(object):
     @property
     def has_skipbody_flag(self):
         return bool(self._flags_bits & hp.F_SKIPBODY)
-
-    def get_status_desc(self):
-        """ get status reason of a response as bytes """
-        return self._data.status_desc
 
     ''' http_parser compatible api '''
 
@@ -588,6 +582,4 @@ cdef class HttpParser(object):
 
     def is_chunked(self):
         """ return True if Transfer-Encoding header value is chunked"""
-        # return self.has_chunked_flag
-        te = self._data.headers.get('transfer-encoding', '').lower()
-        return te == 'chunked'
+        return self.has_chunked_flag
