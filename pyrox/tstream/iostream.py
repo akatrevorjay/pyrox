@@ -68,6 +68,9 @@ class WriteQueue(object):
     def append(self, src):
         self._write_queue.append(src)
 
+    def appendleft(self, src):
+        self._write_queue.appendleft(src)
+
     def advance(self, bytes_to_advance):
         next_src = self._write_queue[0]
 
