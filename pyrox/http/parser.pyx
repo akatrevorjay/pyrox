@@ -16,25 +16,25 @@ from libc.string cimport strlen
 from cpython cimport bool, PyBytes_FromStringAndSize, PyBytes_FromString
 from cpython.version cimport PY_MAJOR_VERSION
 
-from pyrox.http._joyent_http_parser cimport http_cb
-from pyrox.http._joyent_http_parser cimport http_data_cb
-from pyrox.http._joyent_http_parser cimport flags as _flags
-from pyrox.http._joyent_http_parser cimport http_errno as _http_errno
-from pyrox.http._joyent_http_parser cimport http_method as _http_method
-from pyrox.http._joyent_http_parser cimport http_parser_type as _http_parser_type
-from pyrox.http._joyent_http_parser cimport http_parser_url_fields as _http_parser_url_fields
-from pyrox.http._joyent_http_parser cimport HTTP_PARSER_ERRNO as _HTTP_PARSER_ERRNO_http_parser
-from pyrox.http._joyent_http_parser cimport http_body_is_final as _http_body_is_final_http_parser
-from pyrox.http._joyent_http_parser cimport http_errno_description as _http_errno_description_http_parser
-from pyrox.http._joyent_http_parser cimport http_errno_name as _http_errno_name_http_parser
-from pyrox.http._joyent_http_parser cimport http_method_str as _http_method_str_http_parser
-from pyrox.http._joyent_http_parser cimport http_parser_execute as _http_parser_execute_http_parser
-from pyrox.http._joyent_http_parser cimport http_parser_init as _http_parser_init_http_parser
-from pyrox.http._joyent_http_parser cimport http_parser_parse_url as _http_parser_parse_url_http_parser
-from pyrox.http._joyent_http_parser cimport http_parser_pause as _http_parser_pause_http_parser
-from pyrox.http._joyent_http_parser cimport http_parser_url_init as _http_parser_url_init_http_parser
-from pyrox.http._joyent_http_parser cimport http_parser_version as _http_parser_version_http_parser
-from pyrox.http._joyent_http_parser cimport http_should_keep_alive as _http_should_keep_alive_http_parser
+from pyrox.http.joyent_http_parser cimport http_cb
+from pyrox.http.joyent_http_parser cimport http_data_cb
+from pyrox.http.joyent_http_parser cimport flags as _flags
+from pyrox.http.joyent_http_parser cimport http_errno as _http_errno
+from pyrox.http.joyent_http_parser cimport http_method as _http_method
+from pyrox.http.joyent_http_parser cimport http_parser_type as _http_parser_type
+from pyrox.http.joyent_http_parser cimport http_parser_url_fields as _http_parser_url_fields
+from pyrox.http.joyent_http_parser cimport HTTP_PARSER_ERRNO as _HTTP_PARSER_ERRNO_http_parser
+from pyrox.http.joyent_http_parser cimport http_body_is_final as _http_body_is_final_http_parser
+from pyrox.http.joyent_http_parser cimport http_errno_description as _http_errno_description_http_parser
+from pyrox.http.joyent_http_parser cimport http_errno_name as _http_errno_name_http_parser
+from pyrox.http.joyent_http_parser cimport http_method_str as _http_method_str_http_parser
+from pyrox.http.joyent_http_parser cimport http_parser_execute as _http_parser_execute_http_parser
+from pyrox.http.joyent_http_parser cimport http_parser_init as _http_parser_init_http_parser
+from pyrox.http.joyent_http_parser cimport http_parser_parse_url as _http_parser_parse_url_http_parser
+from pyrox.http.joyent_http_parser cimport http_parser_pause as _http_parser_pause_http_parser
+from pyrox.http.joyent_http_parser cimport http_parser_url_init as _http_parser_url_init_http_parser
+from pyrox.http.joyent_http_parser cimport http_parser_version as _http_parser_version_http_parser
+from pyrox.http.joyent_http_parser cimport http_should_keep_alive as _http_should_keep_alive_http_parser
 
 cdef extern from "autowrap_tools.hpp":
     char *_cast_const_away(char *)
@@ -151,7 +151,7 @@ cdef class http_parser_type:
     HTTP_RESPONSE = 1
     HTTP_BOTH = 2
 
-cimport pyrox.http._joyent_http_parser as hp
+cimport pyrox.http.joyent_http_parser as hp
 from .model import HttpHeaderCollection
 
 try:
