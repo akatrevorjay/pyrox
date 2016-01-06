@@ -290,6 +290,7 @@ class HttpRequest(HttpMessage):
     url = None
     socket_client_address = None
     _client_address = None
+    is_upgrade = None
 
     @property
     def client_address(self):

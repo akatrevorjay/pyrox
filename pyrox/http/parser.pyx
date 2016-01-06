@@ -319,6 +319,10 @@ class _ParserData(object):
         return bool(self.body)
 
 
+class ParserError(Exception):
+    pass
+
+
 cdef class HttpParser(object):
     cdef hp.http_parser _parser
     cdef hp.http_parser_settings _settings
@@ -365,13 +369,16 @@ cdef class HttpParser(object):
         nparsed = hp.http_parser_execute(&self._parser, &self._settings,
                                          data, length)
 
-        if nparsed != length:
-            self._raise_errno_if_needed()
-            raise Exception('HttpParser did not parse all of data length but gave an OK back?')
+        # Check to see if parser exited early due to an upgrade (including CONNECT).
+        # If so, this is NOT an error case that nparsed != length.
+        # the parser stops gracefully upon headers complete.
+        if self._parser.upgrade:
+            # Remember to check for this in callers!
+            pass
 
-        # Check to see if parser exited due to an upgrade
-        if self._parser.upgrade == 1:
-            self._delegate.on_upgrade()
+        elif nparsed != length:
+            self._raise_errno_if_needed()
+            raise ParserError('HttpParser did not parse all of data length but gave an OK back?')
 
         return nparsed
 
@@ -385,7 +392,7 @@ cdef class HttpParser(object):
 
         name = hp.http_errno_name(errno)
         desc = hp.http_errno_description(errno)
-        raise Exception(
+        raise ParserError(
             'HttpParser gave error {errno}/{name}: {desc}'.format(
                 errno=<int> errno,
                 name=name,
@@ -562,7 +569,7 @@ cdef class HttpParser(object):
     def is_upgrade(self):
         """ Do we get upgrade header in the request. Useful for
         websockets """
-        return self._parser_upgrade
+        return self.has_upgrade_flag or self._data.upgrade
 
     def is_headers_complete(self):
         """ return True if all headers have been parsed. """
