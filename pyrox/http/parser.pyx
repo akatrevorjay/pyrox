@@ -569,7 +569,7 @@ cdef class HttpParser(object):
     def is_upgrade(self):
         """ Do we get upgrade header in the request. Useful for
         websockets """
-        return self.has_upgrade_flag or self._data.upgrade
+        return self.has_upgrade_flag or self._parser.method == http_method.HTTP_CONNECT
 
     def is_headers_complete(self):
         """ return True if all headers have been parsed. """
