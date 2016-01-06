@@ -310,7 +310,7 @@ class HttpRequest(HttpMessage):
         data.extend(_to_bytes(self.version))
         data.extend(b'\r\n')
         self.headers.to_bytes(data)
-        return bytes(data)
+        return data
 
 
 class HttpResponse(HttpMessage):
@@ -349,4 +349,4 @@ class HttpResponse(HttpMessage):
         data.extend(_to_bytes(self.status))
         data.extend(b'\r\n')
         self.headers.to_bytes(data)
-        return bytes(data)
+        return data
