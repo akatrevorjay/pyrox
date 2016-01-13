@@ -1,20 +1,18 @@
 #cython: c_string_encoding=ascii  # for cython>=0.19
-import os
-import zlib
-from  libcpp.string  cimport string as libcpp_string
-from  libcpp.set     cimport set as libcpp_set
-from  libcpp.vector  cimport vector as libcpp_vector
-from  libcpp.pair    cimport pair as libcpp_pair
-from  libcpp.map     cimport map  as libcpp_map
-from  smart_ptr cimport shared_ptr
-from  AutowrapRefHolder cimport AutowrapRefHolder
-from  libcpp cimport bool
-from  libc.string cimport const_char
-from cython.operator cimport dereference as deref, preincrement as inc, address as address
-from libc.stdlib cimport malloc, free
-from libc.string cimport strlen
+# from  libcpp.string  cimport string as libcpp_string
+# from  libcpp.set     cimport set as libcpp_set
+# from  libcpp.vector  cimport vector as libcpp_vector
+# from  libcpp.pair    cimport pair as libcpp_pair
+# from  libcpp.map     cimport map  as libcpp_map
+# from  smart_ptr cimport shared_ptr
+# from  AutowrapRefHolder cimport AutowrapRefHolder
+# from  libcpp cimport bool
+# from  libc.string cimport const_char
+# from cython.operator cimport dereference as deref, preincrement as inc, address as address
+# from libc.stdlib cimport malloc, free
+# from libc.string cimport strlen
 from cpython cimport bool, PyBytes_FromStringAndSize, PyBytes_FromString
-from cpython.version cimport PY_MAJOR_VERSION
+# from cpython.version cimport PY_MAJOR_VERSION
 
 from pyrox.http.joyent_http_parser cimport http_cb
 from pyrox.http.joyent_http_parser cimport http_data_cb
@@ -158,6 +156,8 @@ try:
     import urllib.parse as urlparse
 except ImportError:
     import urlparse
+import os
+import zlib
 
 cdef int on_message_begin_cb(hp.http_parser *parser) except -1:
     cdef object parser_data = <object> parser.data
@@ -319,6 +319,43 @@ class _ParserData(object):
         return bool(self.body)
 
 
+class _ParserFlagsProxy(object):
+    def __init__(self, parent):
+        self.parent = parent
+
+    @property
+    def as_bits(self):
+        return self.parent._flags_as_bits
+
+    @property
+    def chunked(self):
+        return bool(self.as_bits & hp.F_CHUNKED)
+
+    @property
+    def connection_keep_alive(self):
+        return bool(self.as_bits & hp.F_CONNECTION_KEEP_ALIVE)
+
+    @property
+    def connection_close(self):
+        return bool(self.as_bits & hp.F_CONNECTION_CLOSE)
+
+    @property
+    def connection_upgrade(self):
+        return bool(self.as_bits & hp.F_CONNECTION_UPGRADE)
+
+    @property
+    def trailing(self):
+        return bool(self.as_bits & hp.F_TRAILING)
+
+    @property
+    def upgrade(self):
+        return bool(self.as_bits & hp.F_UPGRADE)
+
+    @property
+    def skipbody(self):
+        return bool(self.as_bits & hp.F_SKIPBODY)
+
+
 class ParserError(Exception):
     pass
 
@@ -326,7 +363,8 @@ class ParserError(Exception):
 cdef class HttpParser(object):
     cdef hp.http_parser _parser
     cdef hp.http_parser_settings _settings
-    cdef object _data
+    cdef public object _data
+    cdef public object flags
     cdef object _parsed_url
 
     def _parser_data_factory(self):
@@ -346,6 +384,8 @@ cdef class HttpParser(object):
 
         self._data = self._parser_data_factory()
         self._parser.data = <void *> self._data
+
+        self.flags = _ParserFlagsProxy(self)
 
         # set callbacks
         self._settings.on_message_begin = <http_cb> on_message_begin_cb
@@ -416,37 +456,11 @@ cdef class HttpParser(object):
         """ get status reason of a response as bytes """
         return self._data.status_desc
 
+    ''' Flags '''
+
     @property
-    def _flags_bits(self):
+    def _flags_as_bits(self):
         return self._parser.flags
-
-    @property
-    def has_chunked_flag(self):
-        return bool(self._flags_bits & hp.F_CHUNKED)
-
-    @property
-    def has_connection_keep_alive_flag(self):
-        return bool(self._flags_bits & hp.F_CONNECTION_KEEP_ALIVE)
-
-    @property
-    def has_connection_close_flag(self):
-        return bool(self._flags_bits & hp.F_CONNECTION_CLOSE)
-
-    @property
-    def has_connection_upgrade_flag(self):
-        return bool(self._flags_bits & hp.F_CONNECTION_UPGRADE)
-
-    @property
-    def has_trailing_flag(self):
-        return bool(self._flags_bits & hp.F_TRAILING)
-
-    @property
-    def has_upgrade_flag(self):
-        return bool(self._flags_bits & hp.F_UPGRADE)
-
-    @property
-    def has_skipbody_flag(self):
-        return bool(self._flags_bits & hp.F_SKIPBODY)
 
     ''' http_parser compatible api '''
 
@@ -568,12 +582,12 @@ cdef class HttpParser(object):
 
     def is_chunked(self):
         """ return True if Transfer-Encoding header value is chunked"""
-        return self.has_chunked_flag
+        return self.flags.chunked
 
     def is_upgrade(self):
         """ Do we get upgrade header in the request. Useful for
         websockets """
-        return self.has_upgrade_flag or self._parser.method == http_method.HTTP_CONNECT
+        return self.flags.upgrade or self._parser.method == http_method.HTTP_CONNECT
 
     def is_headers_complete(self):
         """ return True if all headers have been parsed. """
